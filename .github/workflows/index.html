@@ -1,0 +1,4397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fincher Funds - Unified Alert Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-card: rgba(21, 26, 35, 0.5);
+      --bg-elevated: rgba(26, 32, 44, 0.5);
+      --border: #2d3748;
+      --border-bright: #4a5568;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-tertiary: #64748b;
+      
+      --accent-buy: #26a69a;
+      --accent-sell: #ef5350;
+      --accent-flat: #ff9800;
+      --glow-buy: rgba(38, 166, 154, 0.5);
+      --glow-sell: rgba(239, 83, 80, 0.5);
+      --glow-flat: rgba(255, 152, 0, 0.5);
+      
+      --accent-cyan: #06b6d4;
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'IBM Plex Mono', monospace;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Matrix Background Canvas */
+    #matrix-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.25;
+      pointer-events: none;
+    }
+
+    #matrix-bg.refreshing {
+      opacity: 0.4;
+      animation: matrixPulse 1s ease-in-out;
+    }
+
+    @keyframes matrixPulse {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.3; }
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.1),
+        rgba(0, 0, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0.3;
+    }
+
+    .container {
+      max-width: 2400px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    header {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.3),
+        0 10px 15px -3px rgba(0, 0, 0, 0.4),
+        0 20px 25px -5px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .header-logo {
+      width: 120px;
+      height: 120px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.5));
+      transition: transform 0.3s ease, filter 0.3s ease;
+    }
+
+    .header-logo:hover {
+      transform: scale(1.05);
+      filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.8));
+    }
+
+    .header-text {
+      flex: 1;
+    }
+
+    header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 200%;
+      height: 3px;
+      background: linear-gradient(90deg, 
+        transparent, 
+        var(--accent-cyan), 
+        var(--accent-buy),
+        transparent
+      );
+      animation: scan 3s infinite;
+      box-shadow: 0 0 20px var(--glow-buy);
+    }
+
+    @keyframes scan {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 900;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-buy), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+      text-shadow: 0 0 30px var(--glow-buy);
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .date-display {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--accent-cyan);
+      padding: 8px 16px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 6px;
+      width: fit-content;
+    }
+
+    .date-icon {
+      font-size: 1rem;
+    }
+
+    .date-text {
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .reset-time {
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      margin-left: 8px;
+      padding-left: 8px;
+      border-left: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.2),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--border-bright);
+      transition: all 0.3s;
+    }
+
+    .stat-card.buy::before { 
+      background: var(--accent-buy); 
+      box-shadow: 0 0 10px var(--glow-buy); 
+    }
+    .stat-card.sell::before { 
+      background: var(--accent-sell); 
+      box-shadow: 0 0 10px var(--glow-sell); 
+    }
+    .stat-card.neutral::before { 
+      background: var(--accent-flat); 
+      box-shadow: 0 0 10px var(--glow-flat); 
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-value.buy { 
+      color: var(--accent-buy); 
+      text-shadow: 0 0 20px var(--glow-buy);
+    }
+    .stat-value.sell { 
+      color: var(--accent-sell); 
+      text-shadow: 0 0 20px var(--glow-sell);
+    }
+    .stat-value.neutral { 
+      color: var(--accent-flat); 
+      text-shadow: 0 0 20px var(--glow-flat);
+    }
+
+    .controls {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 
+        0 4px 6px rgba(0, 0, 0, 0.3),
+        0 8px 12px rgba(0, 0, 0, 0.25),
+        0 12px 20px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .filter-row {
+      
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      
+    }
+
+    .filter-label {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+      min-width: 100px;
+    }
+
+    .filter-buttons {
+      
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .filter-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 600;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.3),
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        0 8px 16px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .filter-btn:hover {
+      background: var(--bg-card);
+      border-color: var(--border-bright);
+      transform: translateY(-2px);
+      box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        0 12px 24px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .filter-btn.active {
+      background: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      color: var(--bg-dark);
+      box-shadow: 
+        0 0 20px var(--accent-cyan),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(6, 182, 212, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .symbol-filter-btn.active {
+      background: var(--accent-purple);
+      border-color: var(--accent-purple);
+      box-shadow: 
+        0 0 20px var(--accent-purple),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(168, 85, 247, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .time-filter-btn.active {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: var(--bg-dark);
+      box-shadow: 
+        0 0 20px var(--accent-blue),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(59, 130, 246, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .ctrl-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 600;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.3),
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        0 8px 16px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .ctrl-btn:hover {
+      background: var(--bg-card);
+      border-color: var(--border-bright);
+      transform: translateY(-2px);
+      box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        0 12px 24px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .ctrl-btn.active {
+      background: var(--accent-buy);
+      border-color: var(--accent-buy);
+      color: var(--bg-dark);
+      box-shadow: 
+        0 0 20px var(--glow-buy),
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(38, 166, 154, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .search-input {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      min-width: 200px;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.3),
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 
+        0 0 0 3px rgba(6, 182, 212, 0.2),
+        0 2px 4px rgba(0, 0, 0, 0.3),
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        0 8px 16px rgba(6, 182, 212, 0.3);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .status {
+      
+      
+      gap: 8px;
+      margin-left: auto;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-buy);
+      animation: pulse 2s infinite;
+      box-shadow: 0 0 10px var(--glow-buy);
+    }
+
+    .status-indicator.offline {
+      background: var(--accent-sell);
+      box-shadow: 0 0 10px var(--glow-sell);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.9); }
+    }
+
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 
+        0 4px 6px rgba(0, 0, 0, 0.2),
+        0 10px 15px rgba(0, 0, 0, 0.3),
+        0 20px 25px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .section-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 10px var(--accent-cyan);
+    }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+
+    .heatmap-cell {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 
+        0 1px 3px rgba(0, 0, 0, 0.2),
+        0 2px 6px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .heatmap-cell::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--border);
+      transition: all 0.3s;
+    }
+
+    .heatmap-cell.buy::before { 
+      background: var(--accent-buy); 
+      box-shadow: 0 0 15px var(--glow-buy);
+    }
+    .heatmap-cell.sell::before { 
+      background: var(--accent-sell); 
+      box-shadow: 0 0 15px var(--glow-sell);
+    }
+    .heatmap-cell.flat::before { 
+      background: var(--accent-flat); 
+      box-shadow: 0 0 15px var(--glow-flat);
+    }
+
+    .heatmap-cell:hover {
+      transform: translateY(-3px) scale(1.02);
+      border-color: var(--border-bright);
+      box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.4),
+        0 12px 24px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .cell-symbol {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+    }
+
+    .cell-signal {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .cell-signal.buy { 
+      background: rgba(38, 166, 154, 0.2); 
+      color: var(--accent-buy);
+      box-shadow: 0 0 10px var(--glow-buy);
+    }
+    .cell-signal.sell { 
+      background: rgba(239, 83, 80, 0.2); 
+      color: var(--accent-sell);
+      box-shadow: 0 0 10px var(--glow-sell);
+    }
+    .cell-signal.flat { 
+      background: rgba(255, 152, 0, 0.2); 
+      color: var(--accent-flat);
+      box-shadow: 0 0 10px var(--glow-flat);
+    }
+
+    .cell-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 0.75rem;
+      margin-bottom: 12px;
+    }
+
+    .cell-stat {
+      
+      justify-content: space-between;
+      color: var(--text-secondary);
+    }
+
+    .cell-stat-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .cell-net-sum {
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      
+      justify-content: space-between;
+      
+      font-size: 0.75rem;
+    }
+
+    .net-sum-label {
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .net-sum-value {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .net-sum-value.positive { 
+      color: var(--accent-buy);
+      text-shadow: 0 0 8px var(--glow-buy);
+    }
+    .net-sum-value.negative { 
+      color: var(--accent-sell);
+      text-shadow: 0 0 8px var(--glow-sell);
+    }
+    .net-sum-value.neutral { 
+      color: var(--accent-flat);
+      text-shadow: 0 0 8px var(--glow-flat);
+    }
+
+    .sparkline {
+      width: 100%;
+      height: 30px;
+      margin: 8px 0;
+      opacity: 0.7;
+    }
+
+    .sparkline polyline {
+      transition: stroke-width 0.3s ease;
+    }
+
+    .heatmap-cell:hover .sparkline polyline {
+      stroke-width: 3;
+      opacity: 1;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 500px;
+    }
+
+    /* Timeframe Legend Styles */
+    .timeframe-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 16px;
+      margin-top: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .legend-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .legend-items {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      transition: all 0.3s ease;
+    }
+
+    .legend-item:hover {
+      transform: translateY(-2px);
+      color: var(--accent-cyan);
+    }
+
+    .legend-item span {
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 500;
+    }
+
+    .legend-dot {
+      display: block;
+      filter: drop-shadow(0 0 4px rgba(6, 182, 212, 0.3));
+    }
+
+    .legend-item:hover .legend-dot circle {
+      fill: var(--accent-cyan);
+      filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.6));
+    }
+
+    /* CBC Readings Styles */
+    .cbc-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .cbc-timeframe-group {
+      background: rgba(6, 182, 212, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .cbc-timeframe-header {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .cbc-symbols-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .cbc-symbol-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .cbc-symbol-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      border-color: var(--accent-cyan);
+    }
+
+    .cbc-symbol-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .cbc-value {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+
+    .cbc-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .cbc-indicator.true {
+      background: var(--accent-buy);
+      color: var(--accent-buy);
+    }
+
+    .cbc-indicator.false {
+      background: var(--accent-sell);
+      color: var(--accent-sell);
+    }
+
+    .cbc-label {
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    /* Latest Alerts Styles */
+    .alerts-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .alerts-timeframe-group {
+      background: rgba(168, 85, 247, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .alerts-timeframe-header {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent-purple);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .alerts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .alert-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 80px 1fr 100px 80px;
+      gap: 12px;
+      align-items: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .alert-item:hover {
+      transform: translateX(4px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      border-color: var(--accent-cyan);
+    }
+
+    .alert-item.buy {
+      border-left: 3px solid var(--accent-buy);
+    }
+
+    .alert-item.sell {
+      border-left: 3px solid var(--accent-sell);
+    }
+
+    .alert-item.flat {
+      border-left: 3px solid var(--accent-flat);
+    }
+
+    .alert-symbol {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .alert-time {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: 'Courier New', monospace;
+    }
+
+    .alert-signal {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .alert-signal.buy {
+      background: var(--accent-buy);
+      color: #000;
+    }
+
+    .alert-signal.sell {
+      background: var(--accent-sell);
+      color: #fff;
+    }
+
+    .alert-signal.flat {
+      background: var(--accent-flat);
+      color: #000;
+    }
+
+    .alert-net-sum {
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .alert-net-sum.positive {
+      color: var(--accent-buy);
+    }
+
+    .alert-net-sum.negative {
+      color: var(--accent-sell);
+    }
+
+    .alert-net-sum.neutral {
+      color: var(--accent-flat);
+    }
+
+
+    .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-tertiary);
+      font-size: 0.9rem;
+    }
+
+    /* Cascade Container Styles */
+    .cascade-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      padding: 20px;
+    }
+
+    .cascade-symbol-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .cascade-symbol-card:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+    }
+
+    .cascade-symbol-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cascade-timeframe-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 4px;
+    }
+
+    .cascade-tf-label {
+      width: 40px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .cascade-signal-bar {
+      flex: 1;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+    }
+
+    .cascade-signal-bar.buy {
+      background: linear-gradient(90deg, var(--accent-buy) 0%, rgba(34, 197, 94, 0.3) 100%);
+      color: var(--text-primary);
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+    }
+
+    .cascade-signal-bar.sell {
+      background: linear-gradient(90deg, var(--accent-sell) 0%, rgba(239, 68, 68, 0.3) 100%);
+      color: var(--text-primary);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+    }
+
+    .cascade-signal-bar.flat {
+      background: linear-gradient(90deg, var(--accent-flat) 0%, rgba(255, 152, 0, 0.3) 100%);
+      color: var(--text-primary);
+      box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+    }
+
+    .cascade-net-sum {
+      margin-left: 8px;
+      min-width: 50px;
+      text-align: right;
+      font-weight: bold;
+      font-size: 0.9rem;
+    }
+
+    .cascade-alignment-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .cascade-alignment-badge.aligned {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--accent-buy);
+      border: 1px solid var(--accent-buy);
+    }
+
+    .cascade-alignment-badge.mixed {
+      background: rgba(255, 152, 0, 0.2);
+      color: var(--accent-flat);
+      border: 1px solid var(--accent-flat);
+    }
+
+    /* Correlation Matrix Controls */
+    .correlation-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .correlation-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .correlation-select {
+      padding: 8px 16px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 150px;
+    }
+
+    .correlation-select:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+    }
+
+    .correlation-select:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+
+    .correlation-select option {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 8px;
+    }
+
+    /* CBC Analytics Styles */
+    
+    /* CBC Alignment Heatmap */
+    .cbc-heatmap-grid {
+      display: grid;
+      grid-template-columns: 100px repeat(5, 1fr);
+      gap: 2px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    .cbc-heatmap-header {
+      font-weight: 600;
+      text-align: center;
+      padding: 12px;
+      background: var(--bg-elevated);
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .cbc-heatmap-symbol {
+      font-weight: 600;
+      padding: 12px;
+      background: var(--bg-elevated);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+    }
+
+    .cbc-heatmap-cell {
+      padding: 16px;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    .cbc-heatmap-cell:hover {
+      transform: scale(1.05);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+    }
+
+    .cbc-heatmap-cell.buy {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(34, 197, 94, 0.4));
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .cbc-heatmap-cell.sell {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(239, 68, 68, 0.4));
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .cbc-heatmap-cell.flat {
+      background: linear-gradient(135deg, rgba(255, 152, 0, 0.6), rgba(255, 152, 0, 0.3));
+      border-color: rgba(255, 152, 0, 0.3);
+    }
+
+    .cbc-heatmap-signal {
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .cbc-heatmap-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+      color: #fff;
+    }
+
+    /* CBC Consensus Meter */
+    .cbc-consensus-container {
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+    }
+
+    .cbc-consensus-gauge {
+      position: relative;
+      height: 120px;
+      margin-bottom: 20px;
+    }
+
+    .cbc-consensus-bar {
+      height: 40px;
+      background: linear-gradient(90deg, 
+        rgba(239, 68, 68, 0.8) 0%, 
+        rgba(255, 152, 0, 0.8) 50%, 
+        rgba(34, 197, 94, 0.8) 100%);
+      border-radius: 20px;
+      position: relative;
+      margin: 20px 0;
+    }
+
+    .cbc-consensus-pointer {
+      position: absolute;
+      top: -10px;
+      width: 4px;
+      height: 60px;
+      background: #fff;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+      transition: left 0.5s ease;
+    }
+
+    .cbc-consensus-pointer::before {
+      content: '▼';
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-size: 1.2rem;
+    }
+
+    .cbc-consensus-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .cbc-consensus-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .cbc-consensus-stat {
+      padding: 16px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .cbc-consensus-stat-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .cbc-consensus-stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .cbc-consensus-stat-value.buy { color: var(--accent-buy); }
+    .cbc-consensus-stat-value.sell { color: var(--accent-sell); }
+    .cbc-consensus-stat-value.flat { color: var(--accent-flat); }
+
+    /* CBC Symbol Ranking */
+    .cbc-ranking-container {
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+    }
+
+    .cbc-ranking-item {
+      display: grid;
+      grid-template-columns: 60px 120px 1fr 100px;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      border: 2px solid transparent;
+      transition: all 0.3s ease;
+    }
+
+    .cbc-ranking-item:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+      transform: translateX(5px);
+    }
+
+    .cbc-ranking-medal {
+      font-size: 2rem;
+      text-align: center;
+    }
+
+    .cbc-ranking-symbol {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .cbc-ranking-bar {
+      height: 30px;
+      background: var(--bg-card);
+      border-radius: 15px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .cbc-ranking-bar-fill {
+      height: 100%;
+      border-radius: 15px;
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .cbc-ranking-bar-fill.positive {
+      background: linear-gradient(90deg, rgba(34, 197, 94, 0.6), rgba(34, 197, 94, 0.9));
+    }
+
+    .cbc-ranking-bar-fill.negative {
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.6), rgba(239, 68, 68, 0.9));
+    }
+
+    .cbc-ranking-score {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: 'Orbitron', sans-serif;
+      text-align: right;
+    }
+
+    .cbc-ranking-score.positive { color: var(--accent-buy); }
+    .cbc-ranking-score.negative { color: var(--accent-sell); }
+
+    .cbc-ranking-breakdown {
+      grid-column: 2 / -1;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+    }
+
+    /* CBC Lead/Lag Indicator */
+    .cbc-leadlag-container {
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+    }
+
+    .cbc-leadlag-item {
+      display: grid;
+      grid-template-columns: 40px 120px 1fr 100px;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .cbc-leadlag-item:hover {
+      border-left: 4px solid var(--accent-cyan);
+      transform: translateX(5px);
+    }
+
+    .cbc-leadlag-rank {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-align: center;
+    }
+
+    .cbc-leadlag-symbol {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .cbc-leadlag-timeline {
+      height: 30px;
+      background: var(--bg-card);
+      border-radius: 15px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cbc-leadlag-timeline-fill {
+      height: 100%;
+      background: linear-gradient(90deg, 
+        var(--accent-cyan) 0%, 
+        rgba(6, 182, 212, 0.3) 100%);
+      border-radius: 15px;
+      transition: width 0.5s ease;
+    }
+
+    .cbc-leadlag-lag {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: right;
+    }
+
+    .cbc-leadlag-lag.leader {
+      color: var(--accent-buy);
+      font-weight: 700;
+    }
+
+    /* Breakout/Breakdown Heatmap */
+    .breakout-heatmap-grid {
+      display: grid;
+      grid-template-columns: 120px repeat(5, 1fr);
+      gap: 2px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+      overflow-x: auto;
+      min-width: fit-content;
+    }
+
+    .breakout-heatmap-header {
+      font-weight: 600;
+      text-align: center;
+      padding: 12px 8px;
+      background: var(--bg-elevated);
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .breakout-heatmap-symbol {
+      font-weight: 600;
+      padding: 12px 8px;
+      background: var(--bg-elevated);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .breakout-heatmap-cell {
+      padding: 20px 8px;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: 2px solid transparent;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .breakout-heatmap-cell:hover {
+      transform: scale(1.08);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+      z-index: 10;
+    }
+
+    .breakout-heatmap-cell.bullish {
+      background: linear-gradient(135deg, 
+        rgba(34, 197, 94, 0.9), 
+        rgba(16, 185, 129, 0.7),
+        rgba(34, 197, 94, 0.5));
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    .breakout-heatmap-cell.bullish::before {
+      content: '📈';
+      font-size: 1.8rem;
+      position: absolute;
+      opacity: 0.15;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .breakout-heatmap-cell.bearish {
+      background: linear-gradient(135deg, 
+        rgba(239, 68, 68, 0.9), 
+        rgba(220, 38, 38, 0.7),
+        rgba(239, 68, 68, 0.5));
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .breakout-heatmap-cell.bearish::before {
+      content: '📉';
+      font-size: 1.8rem;
+      position: absolute;
+      opacity: 0.15;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .breakout-heatmap-cell.no-data {
+      background: var(--bg-card);
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    .breakout-heatmap-cell.no-data:hover {
+      transform: none;
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    .breakout-heatmap-label {
+      font-weight: 700;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: #fff;
+      text-align: center;
+      z-index: 1;
+      letter-spacing: 0.5px;
+      line-height: 1.2;
+    }
+
+    .breakout-heatmap-value {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+      text-align: center;
+      z-index: 1;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .breakout-heatmap-icon {
+      font-size: 2.5rem;
+      z-index: 1;
+    }
+
+    .breakout-heatmap-pulse {
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+      }
+      50% {
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.6);
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-dark);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 5px;
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-bright);
+      box-shadow: 
+        inset 0 0 6px rgba(0, 0, 0, 0.5),
+        0 0 10px var(--accent-cyan);
+    }
+
+    @media (max-width: 1200px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .heatmap-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 1.8rem;
+      }
+      .chart-wrapper {
+        height: 350px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Matrix Falling Code Background -->
+  <canvas id="matrix-bg"></canvas>
+
+  <div class="container">
+    <header>
+      <div class="header-text">
+        <h1>FINCHER FUNDS DASHBOARD</h1>
+        <div class="subtitle">Multi-Ticker Heatmap & Alert Strength Timeline</div>
+        <div class="date-display" id="dateDisplay">
+          <span class="date-icon">📅</span>
+          <span class="date-text">Loading...</span>
+          <span class="reset-time" id="resetTime"></span>
+        </div>
+      </div>
+      <img src="fincher_funds_logo.png" alt="Fincher Funds" class="header-logo">
+    </header>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value" id="totalAlerts">0</div>
+      </div>
+      <div class="stat-card buy">
+        <div class="stat-label">Long</div>
+        <div class="stat-value buy" id="buyCount">0</div>
+      </div>
+      <div class="stat-card sell">
+        <div class="stat-label">Short</div>
+        <div class="stat-value sell" id="sellCount">0</div>
+      </div>
+      <div class="stat-card neutral">
+        <div class="stat-label">Flat</div>
+        <div class="stat-value neutral" id="flatCount">0</div>
+      </div>
+      <div class="stat-card buy">
+        <div class="stat-label">Avg Buy</div>
+        <div class="stat-value buy" id="avgBuyStrength">0.0</div>
+      </div>
+      <div class="stat-card sell">
+        <div class="stat-label">Avg Sell</div>
+        <div class="stat-value sell" id="avgSellStrength">0.0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Peak</div>
+        <div class="stat-value" style="color: var(--accent-purple); text-shadow: 0 0 20px rgba(168, 85, 247, 0.5);" id="peakNetSum">0.0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Symbols</div>
+        <div class="stat-value" id="symbolCount">0</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="filter-row">
+        <span class="filter-label">Timeframe:</span>
+        <div class="filter-buttons" id="timeframeFilters"></div>
+      </div>
+      
+      <div class="filter-row">
+        <span class="filter-label">Symbol:</span>
+        <div class="filter-buttons" id="symbolFilters"></div>
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-label">Time of Day:</span>
+        <div class="filter-buttons">
+          <button class="filter-btn time-filter-btn" onclick="toggleTimeOfDay('premarket')" id="time-premarket">Pre-Market (4-9:30 AM)</button>
+          <button class="filter-btn time-filter-btn" onclick="toggleTimeOfDay('open')" id="time-open">Market Open (9:30-11 AM)</button>
+          <button class="filter-btn time-filter-btn" onclick="toggleTimeOfDay('midday')" id="time-midday">Mid-Day (11 AM-2 PM)</button>
+          <button class="filter-btn time-filter-btn" onclick="toggleTimeOfDay('close')" id="time-close">Market Close (2-5 PM)</button>
+          <button class="filter-btn time-filter-btn" onclick="toggleTimeOfDay('afterhours')" id="time-afterhours">After Hours (6-11:45 PM)</button>
+        </div>
+      </div>
+
+      <div class="filter-row" style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+        <button class="ctrl-btn active" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+          <span id="autoRefreshIcon">⏸</span> Auto-Refresh
+        </button>
+        <button class="ctrl-btn" onclick="loadData()">⟳ Refresh</button>
+        <button class="ctrl-btn" onclick="downloadExcel()">⬇ Export</button>
+        <button class="ctrl-btn" onclick="resetFilters()">✕ Clear</button>
+        <input type="text" class="search-input" id="symbolSearch" placeholder="Search symbol...">
+        <div class="status">
+          <div class="status-indicator" id="statusIndicator"></div>
+          <span id="serverStatus">Connecting...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Market Consensus Meter -->
+    <div class="section">
+      <div class="section-title">🎯 Market Consensus Meter</div>
+      <div id="cbcConsensusMeter" class="cbc-consensus-container"></div>
+    </div>
+
+    <!-- Breakout/Breakdown Heatmap -->
+    <div class="section">
+      <div class="section-title">🔥 Breakout/Breakdown Heatmap</div>
+      <div id="breakoutHeatmap" class="breakout-heatmap-grid"></div>
+    </div>
+
+    <!-- 1. Alignment Heatmap -->
+    <div class="section">
+      <div class="section-title">🔥 Alignment Heatmap - All Symbols × Timeframes</div>
+      <div id="cbcAlignmentHeatmap" class="cbc-heatmap-grid"></div>
+    </div>
+
+    <!-- 5. Symbol Strength Ranking -->
+    <div class="section">
+      <div class="section-title">🏆 Symbol Strength Ranking (Live Leaderboard)</div>
+      <div id="cbcSymbolRanking" class="cbc-ranking-container"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Alert Strength Timeline</div>
+      <div class="chart-wrapper">
+        <canvas id="timelineChart"></canvas>
+      </div>
+      <div class="timeframe-legend">
+        <span class="legend-title">Plot Size by Timeframe:</span>
+        <div class="legend-items">
+          <div class="legend-item">
+            <svg width="10" height="10" class="legend-dot">
+              <circle cx="5" cy="5" r="4" fill="#06b6d4" stroke="#0a0e14" stroke-width="1"/>
+            </svg>
+            <span>1 min</span>
+          </div>
+          <div class="legend-item">
+            <svg width="14" height="14" class="legend-dot">
+              <circle cx="7" cy="7" r="6" fill="#06b6d4" stroke="#0a0e14" stroke-width="1"/>
+            </svg>
+            <span>5 min</span>
+          </div>
+          <div class="legend-item">
+            <svg width="18" height="18" class="legend-dot">
+              <circle cx="9" cy="9" r="8" fill="#06b6d4" stroke="#0a0e14" stroke-width="1"/>
+            </svg>
+            <span>15 min</span>
+          </div>
+          <div class="legend-item">
+            <svg width="22" height="22" class="legend-dot">
+              <circle cx="11" cy="11" r="10" fill="#06b6d4" stroke="#0a0e14" stroke-width="1"/>
+            </svg>
+            <span>30 min</span>
+          </div>
+          <div class="legend-item">
+            <svg width="26" height="26" class="legend-dot">
+              <circle cx="13" cy="13" r="12" fill="#06b6d4" stroke="#0a0e14" stroke-width="1"/>
+            </svg>
+            <span>60 min</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Net Sum by Candle Close</div>
+      <div class="chart-wrapper">
+        <canvas id="netSumChart"></canvas>
+      </div>
+    </div>
+
+    <!-- NEW ANALYTICAL CHARTS -->
+    
+    <!-- Signal Distribution by Hour Heatmap -->
+    <div class="section">
+      <div class="section-title">📊 Signal Distribution by Hour</div>
+      <div class="chart-wrapper">
+        <canvas id="hourlyHeatmapChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Signal Strength Distribution Histogram -->
+    <div class="section">
+      <div class="section-title">📈 Signal Strength Distribution</div>
+      <div class="chart-wrapper">
+        <canvas id="strengthHistogramChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Signal Velocity Chart -->
+    <div class="section">
+      <div class="section-title">⚡ Signal Velocity (Signals Per Hour)</div>
+      <div class="chart-wrapper">
+        <canvas id="velocityChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Correlation Matrix -->
+    <div class="section">
+      <div class="section-title">🔗 Symbol Correlation Matrix</div>
+      <div class="correlation-controls">
+        <label for="correlationSymbolSelect" class="correlation-label">Compare Against:</label>
+        <select id="correlationSymbolSelect" class="correlation-select">
+          <option value="">Loading symbols...</option>
+        </select>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="correlationChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Timeframe Cascade View -->
+    <div class="section">
+      <div class="section-title">⏱️ Timeframe Cascade View</div>
+      <div id="timeframeCascadeContainer" class="cascade-container"></div>
+    </div>
+
+    <!-- Alert Density Map -->
+    <div class="section">
+      <div class="section-title">🗺️ Alert Density Map</div>
+      <div class="chart-wrapper">
+        <canvas id="densityMapChart"></canvas>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Symbol Heatmap</div>
+      <div class="heatmap-grid" id="heatmapGrid"></div>
+    </div>
+
+    <!-- CBC Readings Section -->
+    <div class="section">
+      <div class="section-title">🎯 Readings by Timeframe</div>
+      <div class="cbc-container" id="cbcContainer">
+        <div class="loading">Loading CBC data...</div>
+      </div>
+    </div>
+
+    <!-- NEW CBC ANALYTICS -->
+
+    <!-- 2. Market Consensus Meter - MOVED ABOVE -->
+
+    <!-- 3. CBC Waterfall Chart -->
+    <div class="section">
+      <div class="section-title">💧 Signal Waterfall - Contribution Analysis</div>
+      <div class="chart-wrapper">
+        <canvas id="cbcWaterfallChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 4. CBC Timeframe Agreement Score -->
+    <div class="section">
+      <div class="section-title">⏱️ Timeframe Agreement Score</div>
+      <div class="chart-wrapper">
+        <canvas id="cbcTimeframeAgreementChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 5. Symbol Strength Ranking - MOVED ABOVE -->
+
+    <!-- 6. CBC Signal Heat Timeline -->
+    <div class="section">
+      <div class="section-title">🔥 Signal Activity Timeline</div>
+      <div class="chart-wrapper">
+        <canvas id="cbcHeatTimelineChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 7. CBC Multi-Timeframe Tornado Chart -->
+    <div class="section">
+      <div class="section-title">🌪️ Multi-Timeframe Tornado Chart</div>
+      <div class="chart-wrapper">
+        <canvas id="cbcTornadoChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 8. CBC Leading/Lagging Indicator -->
+    <div class="section">
+      <div class="section-title">⏰ Leading/Lagging Indicator</div>
+      <div id="cbcLeadLagIndicator" class="cbc-leadlag-container"></div>
+    </div>
+
+    <!-- Latest Alerts Section -->
+    <div class="section">
+      <div class="section-title">⚡ Latest 25 Alert Signals</div>
+      <div class="alerts-container" id="latestAlerts">
+        <div class="loading">Loading alerts...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Dynamic API configuration for local and remote access
+    // Check if we're running locally or remotely
+    const isLocal = window.location.protocol === 'file:' || 
+                    window.location.hostname === 'localhost' || 
+                    window.location.hostname === '127.0.0.1';
+    
+    // Use localStorage to remember ngrok URL for remote access
+    let savedNgrokUrl = localStorage.getItem('ngrokApiUrl');
+    
+    // Auto-detect or prompt for API URL
+    let API_BASE;
+    if (isLocal) {
+      API_BASE = 'http://localhost:3001';  // Local development
+      console.log('🏠 Running locally - using localhost:3001');
+    } else {
+      if (savedNgrokUrl) {
+        API_BASE = savedNgrokUrl;
+        console.log('🌐 Remote access - using saved URL:', API_BASE);
+      } else {
+        const userUrl = prompt(
+          'Welcome to Fincher Funds Trading Dashboard!\n\n' +
+          'Enter your server API URL:\n' +
+          '(Example: https://abc123.ngrok-free.app)\n\n' +
+          'This URL will be saved for future visits.'
+        );
+        if (userUrl) {
+          // Clean up URL (remove trailing slash)
+          API_BASE = userUrl.trim().replace(/\/$/, '');
+          localStorage.setItem('ngrokApiUrl', API_BASE);
+          console.log('🌐 Remote access - URL saved:', API_BASE);
+        } else {
+          alert('No API URL provided. Dashboard will not load data.');
+          API_BASE = '';
+        }
+      }
+    }
+    
+    // Add button to change API URL (for when ngrok URL changes)
+    if (!isLocal && API_BASE) {
+      console.log('💡 TIP: To change API URL, run: localStorage.removeItem("ngrokApiUrl") then refresh');
+    }
+
+    let chart = null;
+    let netSumChart = null;
+    let autoRefreshInterval = null;
+    let dailyResetInterval = null;
+    let heatmapData = [];
+    let allAlerts = [];
+    let activeTimeframes = new Set();
+    let activeSymbols = new Set();
+    let activeTimesOfDay = new Set();
+
+    // Get current trading day start time in EST
+    function getTodayStartEST() {
+      const now = new Date();
+      // Convert to EST (UTC-5)
+      const estOffset = -5 * 60; // EST offset in minutes
+      const localOffset = now.getTimezoneOffset(); // Local offset from UTC in minutes
+      const estTime = new Date(now.getTime() + (estOffset - localOffset) * 60000);
+      
+      // Set to start of day (00:00:00 EST)
+      estTime.setHours(0, 0, 0, 0);
+      
+      // Convert back to local time
+      return new Date(estTime.getTime() - (estOffset - localOffset) * 60000);
+    }
+
+    // Get next reset time (11:59 PM EST today)
+    function getNextResetTime() {
+      // Get current time in EST
+      const now = new Date();
+      
+      // Create a date object representing now in EST timezone
+      const estNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      
+      // Create today's 11:59 PM EST
+      const resetTimeEST = new Date(estNow);
+      resetTimeEST.setHours(23, 59, 0, 0);
+      
+      // If 11:59 PM EST has already passed today, move to tomorrow
+      if (estNow >= resetTimeEST) {
+        resetTimeEST.setDate(resetTimeEST.getDate() + 1);
+      }
+      
+      // Convert the EST reset time back to local timezone for comparison
+      const estString = resetTimeEST.toLocaleString('en-US', { timeZone: 'America/New_York' });
+      const localResetTime = new Date(estString);
+      
+      return localResetTime;
+    }
+
+    // Filter alerts to only show today's alerts (since 00:00 EST)
+    function filterTodayAlerts(alerts) {
+      const todayStart = getTodayStartEST();
+      return alerts.filter(alert => {
+        const alertTime = new Date(alert.timestamp);
+        return alertTime >= todayStart;
+      });
+    }
+
+    // Clear old alerts from storage
+    async function clearOldAlerts() {
+      try {
+        console.log('🧹 Daily reset triggered at 11:59 PM EST');
+        
+        // Call server endpoint to clear old alerts
+        await fetch(`${API_BASE}/clear-old-alerts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        // Reload data to reflect cleared alerts
+        await loadData();
+        
+        console.log('✅ Old alerts cleared successfully');
+        
+        // Show notification to user
+        showNotification('Daily reset completed - showing today\'s alerts only', 'success');
+      } catch (error) {
+        console.error('Error clearing old alerts:', error);
+      }
+    }
+
+    // Update date display
+    function updateDateDisplay() {
+      const todayStart = getTodayStartEST();
+      const nextReset = getNextResetTime();
+      const now = new Date();
+      
+      // Format date
+      const dateOptions = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        timeZone: 'America/New_York'
+      };
+      const dateText = todayStart.toLocaleDateString('en-US', dateOptions);
+      
+      // Calculate time until reset (in milliseconds)
+      const msUntilReset = nextReset - now;
+      
+      // Convert to hours and minutes
+      const totalMinutes = Math.floor(msUntilReset / (1000 * 60));
+      const hoursUntilReset = Math.floor(totalMinutes / 60);
+      const minutesUntilReset = totalMinutes % 60;
+      
+      // Get current EST time for verification
+      const estNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const estTimeString = estNow.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        timeZone: 'America/New_York'
+      });
+      
+      document.querySelector('.date-text').textContent = `Showing alerts from ${dateText}`;
+      document.getElementById('resetTime').textContent = 
+        `Reset in ${hoursUntilReset}h ${minutesUntilReset}m (11:59 PM EST • Now: ${estTimeString} EST)`;
+    }
+
+    // Schedule daily reset at 11:59 PM EST
+    function scheduleDailyReset() {
+      // Clear any existing interval
+      if (dailyResetInterval) {
+        clearInterval(dailyResetInterval);
+      }
+
+      const checkAndReset = () => {
+        const nextReset = getNextResetTime();
+        const now = new Date();
+        const msUntilReset = nextReset - now;
+
+        console.log(`⏰ Next reset scheduled for: ${nextReset.toLocaleString()} EST`);
+        console.log(`   Time until reset: ${Math.floor(msUntilReset / 1000 / 60)} minutes`);
+
+        // If less than 1 minute until reset, trigger it
+        if (msUntilReset < 60000 && msUntilReset > 0) {
+          setTimeout(() => {
+            clearOldAlerts();
+            scheduleDailyReset(); // Reschedule for next day
+          }, msUntilReset);
+        }
+      };
+
+      // Check every minute
+      dailyResetInterval = setInterval(checkAndReset, 60000);
+      checkAndReset(); // Run immediately on load
+    }
+
+    // Show notification to user
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.textContent = message;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? 'var(--accent-buy)' : 'var(--accent-cyan)'};
+        color: #000;
+        padding: 16px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.3s ease-out;
+      `;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+      }, 3000);
+    }
+
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes slideOut {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    async function checkServer() {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        await res.json();
+        document.getElementById('serverStatus').textContent = 'Connected';
+        document.getElementById('statusIndicator').classList.remove('offline');
+        return true;
+      } catch (error) {
+        document.getElementById('serverStatus').textContent = 'Offline';
+        document.getElementById('statusIndicator').classList.add('offline');
+        return false;
+      }
+    }
+
+    async function loadData() {
+      try {
+        const [heatmapRes, alertsRes, statsRes] = await Promise.all([
+          fetch(`${API_BASE}/heatmap`),
+          fetch(`${API_BASE}/alerts?limit=1000`),
+          fetch(`${API_BASE}/stats`)
+        ]);
+
+        heatmapData = await heatmapRes.json();
+        const alertsData = await alertsRes.json();
+        const stats = await statsRes.json();
+
+        // Show all alerts (no date filtering)
+        allAlerts = alertsData.alerts;
+        
+        console.log(`📊 Loaded ${alertsData.alerts.length} total alerts`);
+        console.log(`📅 Showing all ${allAlerts.length} alerts (no date filter)`);
+
+        updateFilters();
+        updateStats();
+        renderHeatmap();
+        renderCBC();
+        renderBreakoutHeatmap();
+        renderLatestAlerts();
+        updateChart();
+        updateNetSumChart();
+        renderAllAnalyticalCharts(); // Render all new analytical charts
+        renderAllCBCAnalytics(); // Render all analytics charts
+
+        await checkServer();
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    }
+
+    function updateFilters() {
+      const timeframes = new Set();
+      const symbols = new Set();
+
+      allAlerts.forEach(alert => {
+        if (alert.timeframe) timeframes.add(alert.timeframe);
+        if (alert.symbol) symbols.add(alert.symbol);
+      });
+
+      // Sort timeframes numerically (1, 5, 15, 30, 60, etc.)
+      const sortedTimeframes = Array.from(timeframes).sort((a, b) => {
+        return parseInt(a) - parseInt(b);
+      });
+
+      const timeframeContainer = document.getElementById('timeframeFilters');
+      timeframeContainer.innerHTML = sortedTimeframes.map(tf => {
+        const isActive = activeTimeframes.has(tf) ? ' active' : '';
+        return `<button class="filter-btn${isActive}" onclick="toggleTimeframe('${tf}')" id="tf-${tf}">${tf}</button>`;
+      }).join('');
+
+      const symbolContainer = document.getElementById('symbolFilters');
+      symbolContainer.innerHTML = Array.from(symbols).sort().map(sym => {
+        const isActive = activeSymbols.has(sym) ? ' active' : '';
+        return `<button class="filter-btn symbol-filter-btn${isActive}" onclick="toggleSymbol('${sym}')" id="sym-${sym}">${sym}</button>`;
+      }).join('');
+    }
+
+    function toggleTimeframe(timeframe) {
+      const btn = document.getElementById(`tf-${timeframe}`);
+      if (activeTimeframes.has(timeframe)) {
+        activeTimeframes.delete(timeframe);
+        btn.classList.remove('active');
+      } else {
+        activeTimeframes.add(timeframe);
+        btn.classList.add('active');
+      }
+      updateStats();
+      renderHeatmap();
+      renderCBC();
+      renderBreakoutHeatmap();
+      renderLatestAlerts();
+      updateChart();
+      updateNetSumChart();
+    }
+
+    function toggleSymbol(symbol) {
+      const btn = document.getElementById(`sym-${symbol}`);
+      if (activeSymbols.has(symbol)) {
+        activeSymbols.delete(symbol);
+        btn.classList.remove('active');
+      } else {
+        activeSymbols.add(symbol);
+        btn.classList.add('active');
+      }
+      updateStats();
+      renderHeatmap();
+      renderCBC();
+      renderBreakoutHeatmap();
+      renderLatestAlerts();
+      updateChart();
+      updateNetSumChart();
+    }
+
+    function toggleTimeOfDay(timeSlot) {
+      const btn = document.getElementById(`time-${timeSlot}`);
+      if (activeTimesOfDay.has(timeSlot)) {
+        activeTimesOfDay.delete(timeSlot);
+        btn.classList.remove('active');
+      } else {
+        activeTimesOfDay.add(timeSlot);
+        btn.classList.add('active');
+      }
+      updateStats();
+      renderHeatmap();
+      renderCBC();
+      renderBreakoutHeatmap();
+      renderLatestAlerts();
+      updateChart();
+      updateNetSumChart();
+    }
+
+    function getTimeOfDaySlot(timestamp) {
+      const date = new Date(timestamp);
+      const hour = date.getHours();
+      const minute = date.getMinutes();
+      const totalMinutes = hour * 60 + minute;
+
+      // Time slots in EST
+      // Pre-market: 4:00 AM - 9:30 AM (240-570 minutes)
+      // Market Open: 9:30 AM - 11:00 AM (570-660 minutes)
+      // Mid-day: 11:00 AM - 2:00 PM (660-840 minutes)
+      // Market Close: 2:00 PM - 5:00 PM (840-1020 minutes)
+      // After Hours: 6:00 PM - 11:45 PM (1080-1425 minutes)
+
+      if (totalMinutes >= 240 && totalMinutes < 570) return 'premarket';
+      if (totalMinutes >= 570 && totalMinutes < 660) return 'open';
+      if (totalMinutes >= 660 && totalMinutes < 840) return 'midday';
+      if (totalMinutes >= 840 && totalMinutes < 1020) return 'close';
+      if (totalMinutes >= 1080 && totalMinutes < 1425) return 'afterhours';
+      
+      return null; // Outside trading hours
+    }
+
+    function resetFilters() {
+      activeTimeframes.clear();
+      activeSymbols.clear();
+      activeTimesOfDay.clear();
+      document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('symbolSearch').value = '';
+      updateStats();
+      renderHeatmap();
+      renderCBC();
+      renderBreakoutHeatmap();
+      renderLatestAlerts();
+      updateChart();
+      updateNetSumChart();
+    }
+
+    function getFilteredData() {
+      const searchTerm = document.getElementById('symbolSearch').value.toUpperCase();
+      
+      let filtered = heatmapData.filter(d => {
+        const tfMatch = activeTimeframes.size === 0 || true;
+        const symMatch = (activeSymbols.size === 0 || activeSymbols.has(d.symbol)) && 
+                        (!searchTerm || d.symbol.includes(searchTerm));
+        return tfMatch && symMatch;
+      });
+
+      return filtered;
+    }
+
+    function getFilteredAlerts() {
+      const searchTerm = document.getElementById('symbolSearch').value.toUpperCase();
+      
+      return allAlerts.filter(alert => {
+        const tfMatch = activeTimeframes.size === 0 || activeTimeframes.has(alert.timeframe);
+        const symMatch = (activeSymbols.size === 0 || activeSymbols.has(alert.symbol)) && 
+                        (!searchTerm || alert.symbol.includes(searchTerm));
+        
+        // Time of day filter
+        let timeMatch = true;
+        if (activeTimesOfDay.size > 0) {
+          const alertTimeSlot = getTimeOfDaySlot(alert.timestamp);
+          timeMatch = alertTimeSlot && activeTimesOfDay.has(alertTimeSlot);
+        }
+        
+        return tfMatch && symMatch && timeMatch;
+      });
+    }
+
+    function updateStats() {
+      const filtered = getFilteredAlerts();
+      
+      // Check both 'signal' and 'final_signal' fields, handle uppercase
+      const getSignal = (alert) => {
+        const sig = (alert.signal || alert.final_signal || 'FLAT');
+        return String(sig).toUpperCase();
+      };
+      
+      const buyAlerts = filtered.filter(a => getSignal(a) === 'BUY');
+      const sellAlerts = filtered.filter(a => getSignal(a) === 'SELL');
+      const flatAlerts = filtered.filter(a => getSignal(a) === 'FLAT');
+      
+      const total = filtered.length;
+      const buyPercent = total > 0 ? (buyAlerts.length / total * 100).toFixed(1) : 0;
+      const sellPercent = total > 0 ? (sellAlerts.length / total * 100).toFixed(1) : 0;
+      const flatPercent = total > 0 ? (flatAlerts.length / total * 100).toFixed(1) : 0;
+      
+      const avgBuy = buyAlerts.length > 0 
+        ? buyAlerts.reduce((sum, a) => sum + (parseFloat(a.net_sum) || 0), 0) / buyAlerts.length 
+        : 0;
+      
+      const avgSell = sellAlerts.length > 0 
+        ? sellAlerts.reduce((sum, a) => sum + Math.abs(parseFloat(a.net_sum) || 0), 0) / sellAlerts.length 
+        : 0;
+      
+      const peak = Math.max(...filtered.map(a => Math.abs(parseFloat(a.net_sum) || 0)), 0);
+      const symbolSet = new Set(filtered.map(a => a.symbol));
+
+      document.getElementById('totalAlerts').textContent = filtered.length;
+      document.getElementById('buyCount').innerHTML = `${buyAlerts.length}<br><span style="font-size: 0.75rem; opacity: 0.8;">${buyPercent}%</span>`;
+      document.getElementById('sellCount').innerHTML = `${sellAlerts.length}<br><span style="font-size: 0.75rem; opacity: 0.8;">${sellPercent}%</span>`;
+      document.getElementById('flatCount').innerHTML = `${flatAlerts.length}<br><span style="font-size: 0.75rem; opacity: 0.8;">${flatPercent}%</span>`;
+      document.getElementById('avgBuyStrength').textContent = avgBuy.toFixed(1);
+      document.getElementById('avgSellStrength').textContent = avgSell.toFixed(1);
+      document.getElementById('peakNetSum').textContent = peak.toFixed(1);
+      document.getElementById('symbolCount').textContent = symbolSet.size;
+    }
+
+    function renderHeatmap() {
+      const container = document.getElementById('heatmapGrid');
+      const filtered = getFilteredData();
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-data">No symbols available.</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(data => {
+        const signalClass = (data.lastSignal || 'FLAT').toLowerCase();
+        const netSumClass = data.avgNetSum > 0 ? 'positive' : data.avgNetSum < 0 ? 'negative' : 'neutral';
+        
+        // Get last 10 net sum values for sparkline
+        const symbolAlerts = allAlerts.filter(a => a.symbol === data.symbol).slice(-10);
+        const sparklineData = symbolAlerts.map(a => parseFloat(a.net_sum) || 0);
+        const maxVal = Math.max(...sparklineData.map(Math.abs), 1);
+        
+        // Generate SVG sparkline
+        const sparklineSVG = sparklineData.length > 0 ? `
+          <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline
+              fill="none"
+              stroke="${data.avgNetSum > 0 ? '#22c55e' : data.avgNetSum < 0 ? '#ef4444' : '#ff9800'}"
+              stroke-width="2"
+              points="${sparklineData.map((val, idx) => {
+                const x = (idx / (sparklineData.length - 1)) * 100;
+                const y = 15 - (val / maxVal) * 10;
+                return `${x},${y}`;
+              }).join(' ')}"
+            />
+            <line x1="0" y1="15" x2="100" y2="15" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="2,2"/>
+          </svg>
+        ` : '';
+        
+        return `
+          <div class="heatmap-cell ${signalClass}" onclick="filterBySymbol('${data.symbol}')">
+            <div class="cell-symbol">${data.symbol}</div>
+            <div class="cell-signal ${signalClass}">${data.lastSignal || 'FLAT'}</div>
+            ${sparklineSVG}
+            <div class="cell-stats">
+              <div class="cell-stat">
+                <span>Total:</span>
+                <span class="cell-stat-value">${data.totalAlerts}</span>
+              </div>
+              <div class="cell-stat">
+                <span>Long:</span>
+                <span class="cell-stat-value">${data.buyCount}</span>
+              </div>
+              <div class="cell-stat">
+                <span>Short:</span>
+                <span class="cell-stat-value">${data.sellCount}</span>
+              </div>
+              <div class="cell-stat">
+                <span>Flat:</span>
+                <span class="cell-stat-value">${data.flatCount}</span>
+              </div>
+            </div>
+            <div class="cell-net-sum">
+              <span class="net-sum-label">Net</span>
+              <span class="net-sum-value ${netSumClass}">${data.avgNetSum > 0 ? '+' : ''}${data.avgNetSum.toFixed(1)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCBC() {
+      const filtered = getFilteredAlerts();
+      const container = document.getElementById('cbcContainer');
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-data">No CBC data available</div>';
+        return;
+      }
+
+      // Group by timeframe, then get latest CBC for each symbol
+      const timeframeGroups = {};
+      
+      filtered.forEach(alert => {
+        const tf = alert.timeframe;
+        if (!timeframeGroups[tf]) {
+          timeframeGroups[tf] = {};
+        }
+        
+        // Keep only the latest alert for each symbol in this timeframe
+        if (!timeframeGroups[tf][alert.symbol] || 
+            new Date(alert.timestamp) > new Date(timeframeGroups[tf][alert.symbol].timestamp)) {
+          timeframeGroups[tf][alert.symbol] = alert;
+        }
+      });
+
+      // Sort timeframes
+      const sortedTimeframes = Object.keys(timeframeGroups).sort((a, b) => {
+        const order = { '1': 1, '3': 2, '5': 3, '15': 4, '30': 5, '60': 6, '240': 7, 'D': 8, 'W': 9 };
+        return (order[a] || 99) - (order[b] || 99);
+      });
+
+      container.innerHTML = sortedTimeframes.map(tf => {
+        const symbols = timeframeGroups[tf];
+        const tfLabel = tf === '1' ? '1m' : tf === '3' ? '3m' : tf === '5' ? '5m' : 
+                        tf === '15' ? '15m' : tf === '30' ? '30m' : tf === '60' ? '1h' : 
+                        tf === '240' ? '4h' : tf === 'D' ? 'Daily' : tf === 'W' ? 'Weekly' : tf;
+        
+        const symbolsHtml = Object.keys(symbols).sort().map(symbol => {
+          const alert = symbols[symbol];
+          const cbc = alert.cbc;
+          const cbcClass = cbc ? 'true' : 'false';
+          const cbcText = cbc ? 'Bullish Breakout' : 'Bearish Breakdown';
+          
+          return `
+            <div class="cbc-symbol-card">
+              <div class="cbc-symbol-name">${symbol}</div>
+              <div class="cbc-value">
+                <div class="cbc-indicator ${cbcClass}"></div>
+                <span class="cbc-label">${cbcText}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="cbc-timeframe-group">
+            <div class="cbc-timeframe-header">${tfLabel} Timeframe</div>
+            <div class="cbc-symbols-grid">
+              ${symbolsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render Breakout/Breakdown Heatmap
+    function renderBreakoutHeatmap() {
+      const filtered = getFilteredAlerts();
+      const container = document.getElementById('breakoutHeatmap');
+      
+      if (!container) {
+        console.warn('⚠️  Breakout Heatmap container not found');
+        return;
+      }
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-data">No data available</div>';
+        return;
+      }
+
+      // Group by symbol and timeframe, get latest for each
+      const dataGrid = {};
+      
+      filtered.forEach(alert => {
+        const symbol = alert.symbol;
+        const tf = alert.timeframe;
+        
+        if (!dataGrid[symbol]) {
+          dataGrid[symbol] = {};
+        }
+        
+        // Keep only the latest alert for each symbol/timeframe
+        if (!dataGrid[symbol][tf] || 
+            new Date(alert.timestamp) > new Date(dataGrid[symbol][tf].timestamp)) {
+          dataGrid[symbol][tf] = alert;
+        }
+      });
+
+      // Get all unique symbols and sort
+      const symbols = Object.keys(dataGrid).sort();
+
+      // Define timeframe order
+      const timeframes = ['1', '5', '15', '30', '60'];
+      const tfLabels = ['1m', '5m', '15m', '30m', '1h'];
+
+      console.log('📊 Breakout Heatmap:', { symbols: symbols.length, timeframes: timeframes.length });
+
+      // Build HTML with proper grid layout
+      let html = '';
+      
+      // Header row - Empty corner cell + timeframe headers
+      html += '<div class="breakout-heatmap-header" style="grid-column: 1;"></div>';
+      tfLabels.forEach((label, idx) => {
+        html += `<div class="breakout-heatmap-header" style="grid-column: ${idx + 2};">${label}</div>`;
+      });
+
+      // Data rows - Each symbol gets its own row
+      symbols.forEach((symbol, rowIdx) => {
+        // Symbol name cell (first column)
+        html += `<div class="breakout-heatmap-symbol" style="grid-column: 1; grid-row: ${rowIdx + 2};">${symbol}</div>`;
+        
+        // Data cells for each timeframe
+        timeframes.forEach((tf, colIdx) => {
+          const alert = dataGrid[symbol][tf];
+          
+          if (alert && alert.cbc !== undefined && alert.cbc !== null) {
+            const isBullish = alert.cbc === true || alert.cbc === 'true' || alert.cbc === 1;
+            const cellClass = isBullish ? 'bullish' : 'bearish';
+            const icon = isBullish ? '🐂' : '🐻';
+            const label = isBullish ? 'Bullish' : 'Bearish';
+            
+            html += `
+              <div class="breakout-heatmap-cell ${cellClass}" 
+                   style="grid-column: ${colIdx + 2}; grid-row: ${rowIdx + 2};"
+                   title="${symbol} ${tfLabels[colIdx]}: ${isBullish ? 'Bullish Breakout' : 'Bearish Breakdown'}">
+                <div class="breakout-heatmap-icon">${icon}</div>
+              </div>`;
+          } else {
+            html += `<div class="breakout-heatmap-cell no-data" style="grid-column: ${colIdx + 2}; grid-row: ${rowIdx + 2};">—</div>`;
+          }
+        });
+      });
+      
+      container.innerHTML = html;
+    }
+
+    function renderLatestAlerts() {
+      const filtered = getFilteredAlerts();
+      const container = document.getElementById('latestAlerts');
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-data">No alerts available</div>';
+        return;
+      }
+
+      // Get latest 25 alerts
+      const latest = filtered
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 25);
+
+      // Group by timeframe
+      const timeframeGroups = {};
+      latest.forEach(alert => {
+        const tf = alert.timeframe;
+        if (!timeframeGroups[tf]) {
+          timeframeGroups[tf] = [];
+        }
+        timeframeGroups[tf].push(alert);
+      });
+
+      // Sort timeframes
+      const sortedTimeframes = Object.keys(timeframeGroups).sort((a, b) => {
+        const order = { '1': 1, '3': 2, '5': 3, '15': 4, '30': 5, '60': 6, '240': 7, 'D': 8, 'W': 9 };
+        return (order[a] || 99) - (order[b] || 99);
+      });
+
+      container.innerHTML = sortedTimeframes.map(tf => {
+        const alerts = timeframeGroups[tf];
+        const tfLabel = tf === '1' ? '1m' : tf === '3' ? '3m' : tf === '5' ? '5m' : 
+                        tf === '15' ? '15m' : tf === '30' ? '30m' : tf === '60' ? '1h' : 
+                        tf === '240' ? '4h' : tf === 'D' ? 'Daily' : tf === 'W' ? 'Weekly' : tf;
+        
+        const alertsHtml = alerts.map(alert => {
+          const signal = (alert.final_signal || alert.signal || 'FLAT').toUpperCase();
+          const signalClass = signal === 'BUY' ? 'buy' : signal === 'SELL' ? 'sell' : 'flat';
+          const netSum = alert.net_sum || 0;
+          const netSumClass = netSum > 0 ? 'positive' : netSum < 0 ? 'negative' : 'neutral';
+          const netSumDisplay = netSum > 0 ? `+${netSum}` : netSum;
+          
+          const time = new Date(alert.timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+
+          return `
+            <div class="alert-item ${signalClass}">
+              <div class="alert-symbol">${alert.symbol}</div>
+              <div class="alert-time">${time}</div>
+              <div class="alert-signal ${signalClass}">${signal}</div>
+              <div class="alert-net-sum ${netSumClass}">${netSumDisplay}</div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="alerts-timeframe-group">
+            <div class="alerts-timeframe-header">${tfLabel} Timeframe (${alerts.length} alerts)</div>
+            <div class="alerts-list">
+              ${alertsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateChart() {
+      const filtered = getFilteredAlerts();
+
+      const buyPoints = [];
+      const sellPoints = [];
+      const flatPoints = [];
+      const pricePoints = [];
+
+      // Filter MNQ1! data for price line
+      const mnq1Data = filtered.filter(alert => alert.symbol === 'MNQ1!');
+
+      // Function to get point radius based on timeframe
+      function getPointRadius(timeframe) {
+        const tf = parseInt(timeframe);
+        if (tf === 1) return 4;      // 1min - smallest
+        if (tf === 5) return 6;      // 5min
+        if (tf === 15) return 8;     // 15min
+        if (tf === 30) return 10;    // 30min
+        if (tf === 60) return 12;    // 60min - largest
+        return 6; // default
+      }
+
+      filtered.forEach(alert => {
+        const pointRadius = getPointRadius(alert.timeframe);
+        const point = {
+          x: new Date(alert.timestamp),
+          y: alert.net_sum || 0,
+          symbol: alert.symbol,
+          timeframe: alert.timeframe,
+          price: alert.close || alert.price,
+          bulls: alert.bulls_count,
+          bears: alert.bears_count,
+          r: pointRadius  // Add radius to point data
+        };
+
+        if (alert.signal === 'BUY') {
+          buyPoints.push(point);
+        } else if (alert.signal === 'SELL') {
+          sellPoints.push(point);
+        } else {
+          flatPoints.push(point);
+        }
+
+        // Add to price line if it's MNQ1!
+        if (alert.symbol === 'MNQ1!') {
+          pricePoints.push({
+            x: new Date(alert.timestamp),
+            y: alert.close || alert.price || 0
+          });
+        }
+      });
+
+      const ctx = document.getElementById('timelineChart').getContext('2d');
+
+      if (chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Long Signals',
+              data: buyPoints,
+              backgroundColor: 'rgba(38, 166, 154, 0.7)',
+              borderColor: 'rgba(38, 166, 154, 1)',
+              borderWidth: 2,
+              pointRadius: function(context) {
+                return context.raw?.r || 6;  // Use dynamic radius
+              },
+              pointHoverRadius: function(context) {
+                return (context.raw?.r || 6) + 4;  // Hover = +4px
+              },
+              yAxisID: 'y',
+              order: 1  // Render behind MNQ1! line
+            },
+            {
+              label: 'Short Signals',
+              data: sellPoints,
+              backgroundColor: 'rgba(239, 83, 80, 0.7)',
+              borderColor: 'rgba(239, 83, 80, 1)',
+              borderWidth: 2,
+              pointRadius: function(context) {
+                return context.raw?.r || 6;
+              },
+              pointHoverRadius: function(context) {
+                return (context.raw?.r || 6) + 4;
+              },
+              yAxisID: 'y',
+              order: 1  // Render behind MNQ1! line
+            },
+            {
+              label: 'Neutral Signals',
+              data: flatPoints,
+              backgroundColor: 'rgba(255, 152, 0, 0.7)',
+              borderColor: 'rgba(255, 152, 0, 1)',
+              borderWidth: 2,
+              pointRadius: function(context) {
+                return context.raw?.r || 6;
+              },
+              pointHoverRadius: function(context) {
+                return (context.raw?.r || 6) + 4;
+              },
+              yAxisID: 'y',
+              order: 1  // Render behind MNQ1! line
+            },
+            {
+              label: 'MNQ1! Price',
+              data: pricePoints,
+              type: 'line',
+              borderColor: 'rgba(255, 255, 255, 0.8)',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 3,
+              borderDash: [5, 5],
+              fill: false,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 6,
+              pointBackgroundColor: 'rgba(255, 255, 255, 1)',
+              pointBorderColor: '#0a0e14',
+              pointBorderWidth: 2,
+              yAxisID: 'y1',
+              order: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'nearest',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#e2e8f0',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 11
+                },
+                padding: 15,
+                usePointStyle: true,
+                filter: (item) => {
+                  // Show MNQ1! Price in legend only if we have data
+                  if (item.text === 'MNQ1! Price') {
+                    return pricePoints.length > 0;
+                  }
+                  return true;
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(21, 26, 35, 0.95)',
+              titleColor: '#e2e8f0',
+              bodyColor: '#94a3b8',
+              borderColor: '#2d3748',
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                title: (items) => {
+                  const item = items[0];
+                  const point = item.raw;
+                  if (item.dataset.label === 'MNQ1! Price') {
+                    return 'MNQ1! Price';
+                  }
+                  return `${point.symbol} - ${point.timeframe}`;
+                },
+                label: (context) => {
+                  const point = context.raw;
+                  if (context.dataset.label === 'MNQ1! Price') {
+                    return [
+                      `Price: $${point.y.toFixed(2)}`,
+                      `Time: ${point.x.toLocaleString()}`
+                    ];
+                  }
+                  return [
+                    `Net Sum: ${point.y.toFixed(1)}`,
+                    `Price: $${parseFloat(point.price).toFixed(2)}`,
+                    `Bulls: ${point.bulls} | Bears: ${point.bears}`,
+                    `Time: ${point.x.toLocaleString()}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                displayFormats: {
+                  hour: 'MMM d, HH:mm',
+                  day: 'MMM d',
+                  week: 'MMM d',
+                  month: 'MMM yyyy'
+                }
+              },
+              grid: {
+                color: 'rgba(45, 55, 72, 0.5)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono'
+                },
+                padding: 8
+              }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              title: {
+                display: true,
+                text: 'Net Sum',
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 12
+                }
+              },
+              grid: {
+                color: 'rgba(45, 55, 72, 0.5)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono'
+                },
+                callback: function(value) {
+                  return value.toFixed(1);
+                },
+                padding: 8
+              }
+            },
+            y1: {
+              type: 'linear',
+              display: pricePoints.length > 0,
+              position: 'right',
+              title: {
+                display: true,
+                text: 'MNQ1! Price ($)',
+                color: '#ffffff',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 12
+                }
+              },
+              grid: {
+                drawOnChartArea: false,
+                drawBorder: false
+              },
+              ticks: {
+                color: '#ffffff',
+                font: {
+                  family: 'IBM Plex Mono'
+                },
+                callback: function(value) {
+                  return '$' + value.toFixed(0);
+                },
+                padding: 8
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateNetSumChart() {
+      const filtered = getFilteredAlerts();
+
+      // Sort by timestamp
+      const sorted = filtered.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // Group by symbol for net sum
+      const symbolData = {};
+      const mnq1PriceData = [];
+      
+      sorted.forEach(alert => {
+        const symbol = alert.symbol;
+        if (!symbolData[symbol]) {
+          symbolData[symbol] = [];
+        }
+        symbolData[symbol].push({
+          x: new Date(alert.timestamp),
+          y: parseFloat(alert.net_sum) || 0,
+          timeframe: alert.timeframe,
+          signal: alert.signal || alert.final_signal,
+          price: alert.close || alert.price
+        });
+
+        // Collect MNQ1! price data
+        if (symbol === 'MNQ1!') {
+          mnq1PriceData.push({
+            x: new Date(alert.timestamp),
+            y: parseFloat(alert.close || alert.price) || 0
+          });
+        }
+      });
+
+      const ctx = document.getElementById('netSumChart').getContext('2d');
+
+      if (netSumChart) {
+        netSumChart.destroy();
+      }
+
+      // Create datasets for each symbol with different colors
+      const colors = [
+        { bg: 'rgba(6, 182, 212, 0.6)', border: 'rgba(6, 182, 212, 1)' },      // Cyan
+        { bg: 'rgba(168, 85, 247, 0.6)', border: 'rgba(168, 85, 247, 1)' },    // Purple
+        { bg: 'rgba(38, 166, 154, 0.6)', border: 'rgba(38, 166, 154, 1)' },    // Green
+        { bg: 'rgba(239, 83, 80, 0.6)', border: 'rgba(239, 83, 80, 1)' },      // Red
+        { bg: 'rgba(255, 152, 0, 0.6)', border: 'rgba(255, 152, 0, 1)' },      // Orange
+        { bg: 'rgba(156, 39, 176, 0.6)', border: 'rgba(156, 39, 176, 1)' },    // Deep Purple
+        { bg: 'rgba(0, 188, 212, 0.6)', border: 'rgba(0, 188, 212, 1)' },      // Light Blue
+        { bg: 'rgba(255, 193, 7, 0.6)', border: 'rgba(255, 193, 7, 1)' }       // Amber
+      ];
+
+      const datasets = Object.keys(symbolData).map((symbol, index) => ({
+        label: symbol + ' Net Sum',
+        data: symbolData[symbol],
+        backgroundColor: colors[index % colors.length].bg,
+        borderColor: colors[index % colors.length].border,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 8,
+        pointBackgroundColor: colors[index % colors.length].border,
+        pointBorderColor: '#0a0e14',
+        pointBorderWidth: 2,
+        yAxisID: 'y',
+        order: 1  // Render behind MNQ1! line
+      }));
+
+      // Add MNQ1! price line if we have data
+      if (mnq1PriceData.length > 0) {
+        datasets.push({
+          label: 'MNQ1! Price',
+          data: mnq1PriceData,
+          borderColor: 'rgba(255, 255, 255, 0.8)',
+          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          borderWidth: 3,
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 6,
+          pointBackgroundColor: 'rgba(255, 255, 255, 1)',
+          pointBorderColor: '#0a0e14',
+          pointBorderWidth: 2,
+          yAxisID: 'y1',
+          order: 0  // Render on top of net sum lines
+        });
+      }
+
+      netSumChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'nearest',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#e2e8f0',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 11
+                },
+                padding: 15,
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(21, 26, 35, 0.95)',
+              titleColor: '#e2e8f0',
+              bodyColor: '#94a3b8',
+              borderColor: '#2d3748',
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                title: (items) => {
+                  const item = items[0];
+                  return item.dataset.label;
+                },
+                label: (context) => {
+                  const point = context.raw;
+                  if (context.dataset.label === 'MNQ1! Price') {
+                    return [
+                      `Price: $${point.y.toFixed(2)}`,
+                      `Time: ${point.x.toLocaleString()}`
+                    ];
+                  }
+                  const netSum = point.y;
+                  const signal = point.signal || 'UNKNOWN';
+                  const price = point.price || 0;
+                  return [
+                    `Net Sum: ${netSum > 0 ? '+' : ''}${netSum.toFixed(1)}`,
+                    `Signal: ${signal}`,
+                    `Price: $${parseFloat(price).toFixed(2)}`,
+                    `Timeframe: ${point.timeframe}`,
+                    `Time: ${point.x.toLocaleString()}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                displayFormats: {
+                  hour: 'HH:mm',
+                  day: 'MMM d',
+                  week: 'MMM d',
+                  month: 'MMM yyyy'
+                }
+              },
+              grid: {
+                color: 'rgba(45, 55, 72, 0.5)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 10
+                },
+                padding: 8
+              }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              title: {
+                display: true,
+                text: 'Net Sum',
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 12
+                }
+              },
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(45, 55, 72, 0.5)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 10
+                },
+                callback: function(value) {
+                  return value > 0 ? '+' + value.toFixed(1) : value.toFixed(1);
+                },
+                padding: 8
+              }
+            },
+            y1: {
+              type: 'linear',
+              display: mnq1PriceData.length > 0,
+              position: 'right',
+              title: {
+                display: true,
+                text: 'MNQ1! Price ($)',
+                color: '#ffffff',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 12
+                }
+              },
+              grid: {
+                drawOnChartArea: false,
+                drawBorder: false
+              },
+              ticks: {
+                color: '#ffffff',
+                font: {
+                  family: 'IBM Plex Mono',
+                  size: 10
+                },
+                callback: function(value) {
+                  return '$' + value.toFixed(0);
+                },
+                padding: 8
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function filterBySymbol(symbol) {
+      document.getElementById('symbolSearch').value = symbol;
+      updateStats();
+      renderHeatmap();
+      updateChart();
+      updateNetSumChart();
+    }
+
+    function toggleAutoRefresh() {
+      const btn = document.getElementById('autoRefreshBtn');
+      const icon = document.getElementById('autoRefreshIcon');
+      
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.classList.remove('active');
+        icon.textContent = '▶';
+      } else {
+        autoRefreshInterval = setInterval(loadData, 5000);
+        btn.classList.add('active');
+        icon.textContent = '⏸';
+        loadData();
+      }
+    }
+
+    async function downloadExcel() {
+      try {
+        console.log('📥 Attempting to download Excel file...');
+        
+        // First check if file exists
+        const checkResponse = await fetch(`${API_BASE}/health`);
+        if (!checkResponse.ok) {
+          throw new Error('Server is not responding');
+        }
+        
+        // Try to download
+        const downloadUrl = `${API_BASE}/download/excel`;
+        const response = await fetch(downloadUrl);
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Download failed');
+        }
+        
+        // If successful, open in new tab
+        window.open(downloadUrl, '_blank');
+        console.log('✅ Excel download initiated');
+        
+      } catch (error) {
+        console.error('❌ Excel download error:', error);
+        alert(`Excel Download Error: ${error.message}\n\nPossible causes:\n- Excel file not generated yet\n- Server not running\n- No alerts received yet\n\nPlease ensure alerts have been received and try again.`);
+      }
+    }
+
+    document.getElementById('symbolSearch').addEventListener('input', () => {
+      updateStats();
+      renderHeatmap();
+      renderCBC();
+      renderLatestAlerts();
+      updateChart();
+      updateNetSumChart();
+    });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await checkServer();
+      await loadData();
+      toggleAutoRefresh();
+      initMatrix();
+      scheduleDailyReset(); // Schedule daily reset at 11:59 PM EST
+      updateDateDisplay(); // Show current date and reset time
+      
+      // Update date display every minute
+      setInterval(updateDateDisplay, 60000);
+      
+      // Show info about alerts (no date filtering)
+      console.log(`📅 Dashboard showing all alerts (no date filter applied)`);
+      console.log(`⏰ Daily reset scheduled for: ${getNextResetTime().toLocaleString()}`);
+    });
+
+    // ===== NEW ANALYTICAL CHARTS =====
+    
+    // Global chart instances
+    let hourlyHeatmapChart = null;
+    let strengthHistogramChart = null;
+    let velocityChart = null;
+    let correlationChart = null;
+    let densityMapChart = null;
+
+    // 1. SIGNAL DISTRIBUTION BY HOUR HEATMAP
+    function renderHourlyHeatmap() {
+      const filtered = getFilteredAlerts();
+      const ctx = document.getElementById('hourlyHeatmapChart');
+      if (!ctx) return;
+
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      const hourData = {};
+      symbols.forEach(symbol => { hourData[symbol] = new Array(24).fill(0); });
+
+      filtered.forEach(alert => {
+        const date = new Date(alert.timestamp);
+        const hour = date.getHours();
+        if (hourData[alert.symbol]) hourData[alert.symbol][hour]++;
+      });
+
+      const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+      const datasets = symbols.map((symbol, idx) => ({
+        label: symbol,
+        data: hourData[symbol],
+        backgroundColor: `hsla(${idx * 360 / symbols.length}, 70%, 50%, 0.8)`,
+        borderColor: `hsla(${idx * 360 / symbols.length}, 70%, 60%, 1)`,
+        borderWidth: 1
+      }));
+
+      if (hourlyHeatmapChart) hourlyHeatmapChart.destroy();
+      
+      hourlyHeatmapChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: hours, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              title: { display: true, text: 'Hour of Day (EST)', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              stacked: true,
+              title: { display: true, text: 'Alert Count', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            }
+          },
+          plugins: {
+            legend: { display: true, position: 'top', labels: { color: '#e2e8f0' } },
+            title: {
+              display: true,
+              text: 'Signal Distribution by Hour - See When Each Symbol is Most Active',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 2. SIGNAL STRENGTH DISTRIBUTION HISTOGRAM
+    function renderStrengthHistogram() {
+      const filtered = getFilteredAlerts();
+      const ctx = document.getElementById('strengthHistogramChart');
+      if (!ctx) return;
+
+      const bins = {};
+      for (let i = -12; i <= 12; i++) bins[i] = 0;
+      filtered.forEach(alert => {
+        const netSum = Math.round(parseFloat(alert.net_sum) || 0);
+        if (bins[netSum] !== undefined) bins[netSum]++;
+      });
+
+      const labels = Object.keys(bins).map(k => k === '0' ? '0' : (k > 0 ? `+${k}` : k));
+      const data = Object.values(bins);
+      const colors = Object.keys(bins).map(k => {
+        const val = parseInt(k);
+        if (val > 0) return 'rgba(34, 197, 94, 0.8)';
+        if (val < 0) return 'rgba(239, 68, 68, 0.8)';
+        return 'rgba(255, 152, 0, 0.8)';
+      });
+
+      if (strengthHistogramChart) strengthHistogramChart.destroy();
+
+      strengthHistogramChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Alert Count',
+            data: data,
+            backgroundColor: colors,
+            borderColor: colors.map(c => c.replace('0.8', '1')),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Net Sum Value', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { display: false }
+            },
+            y: {
+              title: { display: true, text: 'Frequency', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Signal Strength Distribution - Shows Signal Quality',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 3. SIGNAL VELOCITY CHART
+    function renderVelocityChart() {
+      const filtered = getFilteredAlerts();
+      const ctx = document.getElementById('velocityChart');
+      if (!ctx) return;
+
+      const hourCounts = new Array(24).fill(0);
+      filtered.forEach(alert => {
+        const date = new Date(alert.timestamp);
+        hourCounts[date.getHours()]++;
+      });
+
+      const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+      if (velocityChart) velocityChart.destroy();
+
+      velocityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: hours,
+          datasets: [{
+            label: 'Signals Per Hour',
+            data: hourCounts,
+            borderColor: '#06b6d4',
+            backgroundColor: 'rgba(6, 182, 212, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Hour of Day (EST)', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              title: { display: true, text: 'Signals Count', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: { display: true, labels: { color: '#e2e8f0' } },
+            title: {
+              display: true,
+              text: 'Signal Velocity - High Velocity = Trending Market',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 4. CORRELATION MATRIX
+    let selectedCorrelationSymbol = null;
+
+    function populateCorrelationSymbolSelect() {
+      const filtered = getFilteredAlerts();
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      const select = document.getElementById('correlationSymbolSelect');
+      
+      if (!select) return;
+      
+      // Set default if not yet set
+      if (!selectedCorrelationSymbol && symbols.length > 0) {
+        selectedCorrelationSymbol = symbols[0];
+      }
+      
+      select.innerHTML = symbols.map(sym => 
+        `<option value="${sym}" ${sym === selectedCorrelationSymbol ? 'selected' : ''}>${sym}</option>`
+      ).join('');
+      
+      // Add change event listener
+      select.onchange = function() {
+        selectedCorrelationSymbol = this.value;
+        renderCorrelationMatrix();
+      };
+    }
+
+    function renderCorrelationMatrix() {
+      const filtered = getFilteredAlerts();
+      const ctx = document.getElementById('correlationChart');
+      if (!ctx) return;
+
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      
+      // Ensure selected symbol is valid
+      if (!selectedCorrelationSymbol || !symbols.includes(selectedCorrelationSymbol)) {
+        selectedCorrelationSymbol = symbols[0];
+      }
+      
+      const symbolData = {};
+      symbols.forEach(sym => {
+        symbolData[sym] = filtered.filter(a => a.symbol === sym).map(a => parseFloat(a.net_sum) || 0);
+      });
+
+      function correlation(arr1, arr2) {
+        const n = Math.min(arr1.length, arr2.length);
+        if (n < 2) return 0;
+        const mean1 = arr1.slice(0, n).reduce((a, b) => a + b, 0) / n;
+        const mean2 = arr2.slice(0, n).reduce((a, b) => a + b, 0) / n;
+        let num = 0, den1 = 0, den2 = 0;
+        for (let i = 0; i < n; i++) {
+          const d1 = arr1[i] - mean1, d2 = arr2[i] - mean2;
+          num += d1 * d2;
+          den1 += d1 * d1;
+          den2 += d2 * d2;
+        }
+        return den1 === 0 || den2 === 0 ? 0 : num / Math.sqrt(den1 * den2);
+      }
+
+      // Calculate correlations against selected symbol
+      const baseData = symbolData[selectedCorrelationSymbol];
+      const correlations = symbols
+        .filter(sym => sym !== selectedCorrelationSymbol)
+        .map(sym => ({
+          symbol: sym,
+          correlation: correlation(baseData, symbolData[sym])
+        }))
+        .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+
+      const labels = correlations.map(c => c.symbol);
+      const values = correlations.map(c => c.correlation);
+      const colors = values.map(v => 
+        v > 0 ? `rgba(34, 197, 94, ${Math.abs(v)})` : `rgba(239, 68, 68, ${Math.abs(v)})`
+      );
+
+      if (correlationChart) correlationChart.destroy();
+
+      correlationChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: `Correlation with ${selectedCorrelationSymbol}`,
+            data: values,
+            backgroundColor: colors,
+            borderColor: colors.map(c => c.replace(/[\d.]+\)$/, '1)')),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              min: -1,
+              max: 1,
+              title: { 
+                display: true, 
+                text: 'Correlation Coefficient', 
+                color: '#94a3b8',
+                font: { size: 12 }
+              },
+              ticks: { 
+                color: '#94a3b8',
+                callback: function(value) {
+                  return value.toFixed(2);
+                }
+              },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: 11 } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: `How Other Symbols Correlate with ${selectedCorrelationSymbol}`,
+              color: '#e2e8f0',
+              font: { size: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const value = context.parsed.x;
+                  const percent = (value * 100).toFixed(1);
+                  return `${context.label}: ${percent}% ${value > 0 ? 'positive' : 'negative'} correlation`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 5. TIMEFRAME CASCADE VIEW
+    function renderTimeframeCascade() {
+      const filtered = getFilteredAlerts();
+      const container = document.getElementById('timeframeCascadeContainer');
+      if (!container) {
+        console.warn('⚠️  Timeframe Cascade container not found');
+        return;
+      }
+
+      console.log('📊 Timeframe Cascade rendering with', filtered.length, 'alerts');
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      const timeframes = ['1', '5', '15', '30', '60'];
+      let html = '';
+
+      symbols.forEach(symbol => {
+        const symbolAlerts = filtered.filter(a => a.symbol === symbol);
+        const tfData = {};
+        let allAligned = true, firstSignal = null;
+
+        timeframes.forEach(tf => {
+          const tfAlerts = symbolAlerts.filter(a => a.timeframe === tf);
+          if (tfAlerts.length > 0) {
+            const latest = tfAlerts[tfAlerts.length - 1];
+            const signal = (latest.signal || latest.final_signal || 'FLAT').toUpperCase();
+            tfData[tf] = { signal, netSum: parseFloat(latest.net_sum) || 0 };
+            if (firstSignal === null) firstSignal = signal;
+            else if (signal !== firstSignal) allAligned = false;
+          } else {
+            tfData[tf] = { signal: 'NO DATA', netSum: 0 };
+            allAligned = false;
+          }
+        });
+
+        const alignmentBadge = allAligned && firstSignal 
+          ? `<span class="cascade-alignment-badge aligned">✓ ALIGNED ${firstSignal}</span>`
+          : `<span class="cascade-alignment-badge mixed">⚠ MIXED</span>`;
+
+        html += `<div class="cascade-symbol-card">
+          <div class="cascade-symbol-title"><span>${symbol}</span>${alignmentBadge}</div>`;
+
+        timeframes.forEach(tf => {
+          const data = tfData[tf];
+          const signalClass = data.signal.toLowerCase();
+          const netSumColor = data.netSum > 0 ? 'var(--accent-buy)' : data.netSum < 0 ? 'var(--accent-sell)' : 'var(--accent-flat)';
+          html += `<div class="cascade-timeframe-row">
+            <span class="cascade-tf-label">${tf}m</span>
+            <div class="cascade-signal-bar ${signalClass}">${data.signal}</div>
+            <span class="cascade-net-sum" style="color: ${netSumColor}">${data.netSum > 0 ? '+' : ''}${data.netSum.toFixed(1)}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      });
+
+      container.innerHTML = html || '<div class="no-data">No data available for cascade view.</div>';
+    }
+
+    // 6. ALERT DENSITY MAP
+    function renderDensityMap() {
+      const filtered = getFilteredAlerts();
+      const ctx = document.getElementById('densityMapChart');
+      if (!ctx) return;
+
+      const netSumBins = [];
+      for (let i = -12; i <= 12; i += 2) netSumBins.push(i);
+
+      const timeWindows = 12, windowSize = filtered.length / timeWindows;
+      const densityData = [];
+
+      for (let t = 0; t < timeWindows; t++) {
+        const windowAlerts = filtered.slice(Math.floor(t * windowSize), Math.floor((t + 1) * windowSize));
+        netSumBins.forEach((binStart, binIdx) => {
+          const count = windowAlerts.filter(a => {
+            const ns = parseFloat(a.net_sum) || 0;
+            return ns >= binStart && ns < binStart + 2;
+          }).length;
+          if (count > 0) densityData.push({ x: t, y: binIdx, v: count });
+        });
+      }
+
+      if (densityMapChart) densityMapChart.destroy();
+
+      const maxDensity = Math.max(...densityData.map(d => d.v), 1);
+
+      densityMapChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Alert Density',
+            data: densityData,
+            backgroundColor: function(context) {
+              const value = densityData[context.dataIndex]?.v || 0;
+              return `rgba(6, 182, 212, ${value / maxDensity})`;
+            },
+            pointRadius: 15
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Time Period', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' }
+            },
+            y: {
+              title: { display: true, text: 'Net Sum Range', color: '#94a3b8' },
+              ticks: { 
+                color: '#94a3b8',
+                callback: function(value) {
+                  const binStart = netSumBins[value];
+                  return binStart !== undefined ? `${binStart} to ${binStart + 2}` : '';
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Alert Density Map - Shows Where Net Sum "Likes to Be"',
+              color: '#e2e8f0'
+            }
+          }
+        }
+      });
+    }
+
+    // ===== CBC ANALYTICS FUNCTIONS =====
+
+    // Global CBC chart instances
+    let cbcWaterfallChart = null;
+    let cbcTimeframeAgreementChart = null;
+    let cbcHeatTimelineChart = null;
+    let cbcTornadoChart = null;
+
+    // Helper function to extract CBC data from alerts
+    function getCBCData() {
+      const filtered = getFilteredAlerts();
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      const timeframes = ['1', '5', '15', '30', '60'];
+      
+      console.log(`📊 getCBCData: Processing ${filtered.length} alerts`);
+      
+      const cbcData = {};
+      
+      symbols.forEach(symbol => {
+        cbcData[symbol] = {};
+        timeframes.forEach(tf => {
+          const tfAlerts = filtered.filter(a => a.symbol === symbol && a.timeframe === tf);
+          if (tfAlerts.length > 0) {
+            // Sort by timestamp descending and get the most recent
+            const sorted = tfAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const latest = sorted[0];
+            
+            // Debug log for first symbol/timeframe combo
+            if (symbol === symbols[0] && tf === '1') {
+              console.log(`  Latest for ${symbol} ${tf}m:`, {
+                timestamp: latest.timestamp,
+                signal: latest.signal || latest.final_signal,
+                net_sum: latest.net_sum,
+                totalAlerts: tfAlerts.length
+              });
+            }
+            
+            cbcData[symbol][tf] = {
+              signal: (latest.signal || latest.final_signal || 'FLAT').toUpperCase(),
+              value: parseFloat(latest.net_sum) || 0,
+              bulls: latest.bulls_count || 0,
+              bears: latest.bears_count || 0,
+              timestamp: latest.timestamp
+            };
+          }
+        });
+      });
+      
+      return { cbcData, symbols, timeframes };
+    }
+
+    // 1. CBC ALIGNMENT HEATMAP
+    function renderCBCAlignmentHeatmap() {
+      const container = document.getElementById('cbcAlignmentHeatmap');
+      if (!container) {
+        console.warn('⚠️  CBC Alignment Heatmap container not found');
+        return;
+      }
+      
+      const { cbcData, symbols, timeframes } = getCBCData();
+      console.log('📊 Heatmap data:', { symbols: symbols.length, timeframes: timeframes.length });
+      
+      let html = '';
+      
+      // Header row
+      html += '<div class="cbc-heatmap-header"></div>';
+      timeframes.forEach(tf => {
+        html += `<div class="cbc-heatmap-header">${tf}m</div>`;
+      });
+      
+      // Data rows
+      symbols.forEach(symbol => {
+        html += `<div class="cbc-heatmap-symbol">${symbol}</div>`;
+        
+        timeframes.forEach(tf => {
+          const data = cbcData[symbol][tf];
+          if (data) {
+            const signalClass = data.signal.toLowerCase();
+            const valueSign = data.value > 0 ? '+' : '';
+            html += `
+              <div class="cbc-heatmap-cell ${signalClass}" 
+                   title="${symbol} ${tf}m: ${data.signal} (${valueSign}${data.value.toFixed(1)})">
+                <span class="cbc-heatmap-signal">${data.signal}</span>
+                <span class="cbc-heatmap-value">${valueSign}${data.value.toFixed(1)}</span>
+              </div>`;
+          } else {
+            html += '<div class="cbc-heatmap-cell" style="opacity: 0.3; background: var(--bg-card);">—</div>';
+          }
+        });
+      });
+      
+      container.innerHTML = html;
+    }
+
+    // 2. CBC CONSENSUS METER
+    function renderCBCConsensusMeter() {
+      const container = document.getElementById('cbcConsensusMeter');
+      if (!container) return;
+      
+      // Get latest alert per symbol/timeframe using getCBCData
+      const { cbcData, symbols, timeframes } = getCBCData();
+      
+      let buyCount = 0, sellCount = 0, flatCount = 0;
+      
+      // Count signals from latest alerts only (one per symbol/timeframe)
+      symbols.forEach(symbol => {
+        timeframes.forEach(tf => {
+          if (cbcData[symbol][tf]) {
+            const signal = cbcData[symbol][tf].signal;
+            if (signal === 'BUY') buyCount++;
+            else if (signal === 'SELL') sellCount++;
+            else flatCount++;
+          }
+        });
+      });
+      
+      const total = buyCount + sellCount + flatCount;
+      const netSignal = buyCount - sellCount;
+      const consensus = total > 0 ? (netSignal / total) : 0; // -1 to +1
+      const consensusPercent = ((consensus + 1) / 2 * 100); // 0 to 100
+      
+      const direction = consensus > 0.3 ? 'BULLISH' : consensus < -0.3 ? 'BEARISH' : 'NEUTRAL';
+      const directionColor = consensus > 0.3 ? 'var(--accent-buy)' : consensus < -0.3 ? 'var(--accent-sell)' : 'var(--accent-flat)';
+      
+      console.log('📊 Market Consensus:', { buyCount, sellCount, flatCount, total, consensus: (consensus * 100).toFixed(1) + '%' });
+      
+      container.innerHTML = `
+        <div class="cbc-consensus-gauge">
+          <div class="cbc-consensus-bar">
+            <div class="cbc-consensus-pointer" style="left: ${consensusPercent}%"></div>
+          </div>
+          <div class="cbc-consensus-labels">
+            <span style="color: var(--accent-sell);">BEARISH</span>
+            <span style="color: var(--accent-flat);">NEUTRAL</span>
+            <span style="color: var(--accent-buy);">BULLISH</span>
+          </div>
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+          <div style="font-size: 2rem; font-weight: 700; color: ${directionColor};">
+            ${direction}
+          </div>
+          <div style="font-size: 1rem; color: var(--text-secondary); margin-top: 8px;">
+            Net Signal: ${netSignal > 0 ? '+' : ''}${netSignal} (${(consensus * 100).toFixed(1)}%)
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+            Based on ${total} latest signals (${symbols.length} symbols × ${timeframes.length} timeframes)
+          </div>
+        </div>
+        <div class="cbc-consensus-stats">
+          <div class="cbc-consensus-stat">
+            <div class="cbc-consensus-stat-label">BUY Signals</div>
+            <div class="cbc-consensus-stat-value buy">${buyCount}</div>
+          </div>
+          <div class="cbc-consensus-stat">
+            <div class="cbc-consensus-stat-label">SELL Signals</div>
+            <div class="cbc-consensus-stat-value sell">${sellCount}</div>
+          </div>
+          <div class="cbc-consensus-stat">
+            <div class="cbc-consensus-stat-label">FLAT Signals</div>
+            <div class="cbc-consensus-stat-value flat">${flatCount}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. CBC WATERFALL CHART  
+    function renderCBCWaterfallChart() {
+      const ctx = document.getElementById('cbcWaterfallChart');
+      if (!ctx) return;
+      
+      const { cbcData, symbols, timeframes } = getCBCData();
+      
+      // Calculate contributions
+      const contributions = [];
+      symbols.forEach(symbol => {
+        timeframes.forEach(tf => {
+          const data = cbcData[symbol][tf];
+          if (data) {
+            contributions.push({
+              label: `${symbol} ${tf}m`,
+              value: data.value,
+              signal: data.signal
+            });
+          }
+        });
+      });
+      
+      // Sort by absolute value
+      contributions.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+      
+      // Take top 20
+      const top20 = contributions.slice(0, 20);
+      
+      const labels = top20.map(c => c.label);
+      const values = top20.map(c => c.value);
+      const colors = top20.map(c => 
+        c.value > 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
+      );
+      
+      if (cbcWaterfallChart) cbcWaterfallChart.destroy();
+      
+      cbcWaterfallChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Signal Contribution',
+            data: values,
+            backgroundColor: colors,
+            borderColor: colors.map(c => c.replace('0.8', '1')),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Contribution to Net Signal', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: 10 } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Top 20 Contributors to Overall Market Signal',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 4. CBC TIMEFRAME AGREEMENT SCORE
+    function renderCBCTimeframeAgreementChart() {
+      const ctx = document.getElementById('cbcTimeframeAgreementChart');
+      if (!ctx) return;
+      
+      const { cbcData, symbols, timeframes } = getCBCData();
+      
+      const agreementScores = timeframes.map(tf => {
+        let buy = 0, sell = 0, flat = 0;
+        
+        symbols.forEach(symbol => {
+          const data = cbcData[symbol][tf];
+          if (data) {
+            if (data.signal === 'BUY') buy++;
+            else if (data.signal === 'SELL') sell++;
+            else flat++;
+          }
+        });
+        
+        const total = buy + sell + flat;
+        const maxCount = Math.max(buy, sell, flat);
+        const agreement = total > 0 ? (maxCount / total * 100) : 0;
+        
+        return { timeframe: tf, agreement, buy, sell, flat, total };
+      });
+      
+      const labels = agreementScores.map(s => `${s.timeframe}m`);
+      const values = agreementScores.map(s => s.agreement);
+      const colors = agreementScores.map(s => `rgba(6, 182, 212, ${s.agreement / 100})`);
+      
+      if (cbcTimeframeAgreementChart) cbcTimeframeAgreementChart.destroy();
+      
+      cbcTimeframeAgreementChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Agreement %',
+            data: values,
+            backgroundColor: colors,
+            borderColor: 'rgba(6, 182, 212, 1)',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              min: 0,
+              max: 100,
+              title: { display: true, text: 'Agreement Percentage', color: '#94a3b8' },
+              ticks: { color: '#94a3b8', callback: function(value) { return value + '%'; } },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: 12 } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Signal Agreement by Timeframe - Higher = More Reliable',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 5. CBC SYMBOL STRENGTH RANKING
+    function renderCBCSymbolRanking() {
+      const container = document.getElementById('cbcSymbolRanking');
+      if (!container) return;
+      
+      const { cbcData, symbols, timeframes } = getCBCData();
+      
+      const rankings = symbols.map(symbol => {
+        let totalValue = 0;
+        const breakdown = {};
+        
+        timeframes.forEach(tf => {
+          const data = cbcData[symbol][tf];
+          if (data) {
+            totalValue += data.value;
+            breakdown[tf] = data.value;
+          }
+        });
+        
+        return { symbol, totalValue, breakdown };
+      });
+      
+      rankings.sort((a, b) => Math.abs(b.totalValue) - Math.abs(a.totalValue));
+      
+      const maxAbsValue = Math.max(...rankings.map(r => Math.abs(r.totalValue)), 1);
+      const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      
+      let html = '';
+      
+      rankings.forEach((rank, idx) => {
+        const barWidth = (Math.abs(rank.totalValue) / maxAbsValue * 100);
+        const valueClass = rank.totalValue > 0 ? 'positive' : 'negative';
+        const valueSign = rank.totalValue > 0 ? '+' : '';
+        const medal = medals[idx] || '•';
+        
+        const breakdownText = timeframes
+          .map(tf => rank.breakdown[tf] ? `${tf}m: ${rank.breakdown[tf] > 0 ? '+' : ''}${rank.breakdown[tf].toFixed(1)}` : '')
+          .filter(Boolean)
+          .join(', ');
+        
+        html += `
+          <div class="cbc-ranking-item">
+            <div class="cbc-ranking-medal">${medal}</div>
+            <div class="cbc-ranking-symbol">${rank.symbol}</div>
+            <div class="cbc-ranking-bar">
+              <div class="cbc-ranking-bar-fill ${valueClass}" style="width: ${barWidth}%">
+                ${valueSign}${rank.totalValue.toFixed(1)}
+              </div>
+            </div>
+            <div class="cbc-ranking-score ${valueClass}">${valueSign}${rank.totalValue.toFixed(1)}</div>
+            <div class="cbc-ranking-breakdown">${breakdownText}</div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html || '<div class="no-data">No ranking data available</div>';
+    }
+
+    // 6. CBC SIGNAL HEAT TIMELINE
+    function renderCBCHeatTimeline() {
+      const ctx = document.getElementById('cbcHeatTimelineChart');
+      if (!ctx) return;
+      
+      const filtered = getFilteredAlerts();
+      const hourCounts = new Array(24).fill(0);
+      
+      filtered.forEach(alert => {
+        const date = new Date(alert.timestamp);
+        hourCounts[date.getHours()]++;
+      });
+      
+      const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+      
+      if (cbcHeatTimelineChart) cbcHeatTimelineChart.destroy();
+      
+      cbcHeatTimelineChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: hours,
+          datasets: [{
+            label: 'Signal Count',
+            data: hourCounts,
+            backgroundColor: hourCounts.map((count, idx) => {
+              const intensity = count / Math.max(...hourCounts);
+              const isMarketHours = idx >= 9 && idx <= 16;
+              return isMarketHours 
+                ? `rgba(6, 182, 212, ${intensity})`
+                : `rgba(168, 85, 247, ${intensity})`;
+            }),
+            borderColor: 'rgba(6, 182, 212, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Hour of Day (EST)', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              title: { display: true, text: 'Signal Count', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Signal Activity by Hour - Find Peak Trading Times',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 7. CBC MULTI-TIMEFRAME TORNADO CHART
+    function renderCBCTornadoChart() {
+      const ctx = document.getElementById('cbcTornadoChart');
+      if (!ctx) return;
+      
+      const { cbcData, symbols, timeframes } = getCBCData();
+      
+      const timeframeAverages = timeframes.map(tf => {
+        let sum = 0, count = 0;
+        symbols.forEach(symbol => {
+          const data = cbcData[symbol][tf];
+          if (data) {
+            sum += data.value;
+            count++;
+          }
+        });
+        return { timeframe: tf, average: count > 0 ? sum / count : 0 };
+      });
+      
+      timeframeAverages.reverse();
+      
+      const labels = timeframeAverages.map(t => `${t.timeframe}m`);
+      const values = timeframeAverages.map(t => t.average);
+      const colors = values.map(v => 
+        v > 0 ? `rgba(34, 197, 94, ${Math.abs(v) / 10})` : `rgba(239, 68, 68, ${Math.abs(v) / 10})`
+      );
+      
+      if (cbcTornadoChart) cbcTornadoChart.destroy();
+      
+      cbcTornadoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Avg Net Sum',
+            data: values,
+            backgroundColor: colors,
+            borderColor: colors.map(c => c.replace(/[\d.]+\)$/, '1)')),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Average Net Sum', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(45, 55, 72, 0.5)' }
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { size: 14, weight: 'bold' } },
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Multi-Timeframe Tornado - Symmetric Signal Strength View',
+              color: '#e2e8f0',
+              font: { size: 14 }
+            }
+          }
+        }
+      });
+    }
+
+    // 8. CBC LEADING/LAGGING INDICATOR
+    function renderCBCLeadLagIndicator() {
+      const container = document.getElementById('cbcLeadLagIndicator');
+      if (!container) return;
+      
+      const filtered = getFilteredAlerts();
+      const symbols = [...new Set(filtered.map(a => a.symbol))].sort();
+      
+      const symbolTimestamps = symbols.map(symbol => {
+        const symbolAlerts = filtered.filter(a => a.symbol === symbol);
+        if (symbolAlerts.length === 0) return null;
+        
+        const avgTimestamp = symbolAlerts.reduce((sum, alert) => 
+          sum + new Date(alert.timestamp).getTime(), 0
+        ) / symbolAlerts.length;
+        
+        return { symbol, avgTimestamp, count: symbolAlerts.length };
+      }).filter(Boolean);
+      
+      symbolTimestamps.sort((a, b) => a.avgTimestamp - b.avgTimestamp);
+      
+      const leaderTimestamp = symbolTimestamps[0]?.avgTimestamp || 0;
+      const maxLag = Math.max(...symbolTimestamps.map(s => s.avgTimestamp - leaderTimestamp), 1);
+      
+      let html = '';
+      
+      symbolTimestamps.forEach((item, idx) => {
+        const lag = item.avgTimestamp - leaderTimestamp;
+        const lagMinutes = lag / (1000 * 60);
+        const timelineWidth = (lag / maxLag * 100);
+        const isLeader = idx === 0;
+        
+        html += `
+          <div class="cbc-leadlag-item">
+            <div class="cbc-leadlag-rank">${idx + 1}</div>
+            <div class="cbc-leadlag-symbol">${item.symbol}</div>
+            <div class="cbc-leadlag-timeline">
+              <div class="cbc-leadlag-timeline-fill" style="width: ${timelineWidth}%"></div>
+            </div>
+            <div class="cbc-leadlag-lag ${isLeader ? 'leader' : ''}">
+              ${isLeader ? 'LEADER' : `+${lagMinutes.toFixed(1)}m`}
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html || '<div class="no-data">Not enough data to determine lead/lag</div>';
+    }
+
+    // Render all analytics
+    function renderAllCBCAnalytics() {
+      console.log('🔄 Rendering all analytics...');
+      renderCBCAlignmentHeatmap();
+      renderCBCConsensusMeter();
+      renderCBCWaterfallChart();
+      renderCBCTimeframeAgreementChart();
+      renderCBCSymbolRanking();
+      renderCBCHeatTimeline();
+      renderCBCTornadoChart();
+      renderCBCLeadLagIndicator();
+      console.log('✅ Analytics charts rendered');
+    }
+
+    // Render all new analytical charts
+    function renderAllAnalyticalCharts() {
+      console.log('🔄 Rendering all analytical charts...');
+      renderHourlyHeatmap();
+      renderStrengthHistogram();
+      renderVelocityChart();
+      populateCorrelationSymbolSelect();
+      renderCorrelationMatrix();
+      renderTimeframeCascade();
+      renderDensityMap();
+      console.log('✅ Analytical charts rendered');
+    }
+
+    // ===== Matrix Falling Code Animation =====
+    function initMatrix() {
+      const canvas = document.getElementById('matrix-bg');
+      const ctx = canvas.getContext('2d');
+
+      // Set canvas to full window size
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      // Matrix characters - binary, numbers, trading symbols
+      const chars = '01$€¥£฿BUYSELLФLATŁØ¤';
+      const brandingText = 'FINCHER FUNDS';
+      const fontSize = 14;
+      const brandingFontSize = 28; // 2x larger for branding
+      const columns = canvas.width / fontSize;
+
+      // Array for drops - one per column
+      const drops = [];
+      for (let i = 0; i < columns; i++) {
+        drops[i] = Math.random() * -100; // Random start position
+      }
+
+      // Branding drops - horizontal text that falls
+      const brandingDrops = [];
+      
+      // Create initial branding drops (4 instances falling at different speeds)
+      for (let i = 0; i < 4; i++) {
+        brandingDrops.push({
+          x: Math.random() * (canvas.width - brandingText.length * brandingFontSize * 0.6),
+          y: Math.random() * -500 - i * 350, // Stagger vertically
+          speed: 1 + Math.random() * 0.5 // Random speed 1-1.5
+        });
+      }
+
+      // Draw function
+      function draw() {
+        // Black background with slight transparency for trail effect
+        ctx.fillStyle = 'rgba(10, 14, 39, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw regular matrix drops first (background layer)
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#60a5fa'; // Brighter blue glow
+        ctx.fillStyle = '#38bdf8'; // Much brighter cyan
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          // Regular matrix characters
+          const text = chars[Math.floor(Math.random() * chars.length)];
+          
+          // Draw character
+          ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+          // Reset drop to top randomly after it passes screen
+          if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+
+          // Increment Y coordinate
+          drops[i]++;
+        }
+
+        // Draw "FINCHER FUNDS" branding (foreground layer - stands out!)
+        brandingDrops.forEach((drop, index) => {
+          // Much stronger glow and brightness for branding
+          ctx.shadowBlur = 40; // Even more massive glow
+          ctx.shadowColor = '#93c5fd'; // Very bright blue
+          ctx.fillStyle = '#ffffff'; // Pure white for maximum contrast!
+          ctx.font = `bold ${brandingFontSize}px monospace`;
+          
+          // Draw each letter with spacing
+          for (let i = 0; i < brandingText.length; i++) {
+            const char = brandingText[i];
+            const x = drop.x + i * (brandingFontSize * 0.6);
+            
+            // Add extra glow to make it really pop
+            ctx.shadowBlur = 40;
+            ctx.fillText(char, x, drop.y);
+          }
+
+          // Move branding down
+          drop.y += drop.speed;
+
+          // Reset to top when it goes off screen
+          if (drop.y > canvas.height + 50) {
+            drop.y = -50 - Math.random() * 300;
+            drop.x = Math.random() * (canvas.width - brandingText.length * brandingFontSize * 0.6);
+            drop.speed = 1 + Math.random() * 0.5;
+          }
+        });
+        
+        // Reset shadow for next frame
+        ctx.shadowBlur = 0;
+      }
+
+      // Animation loop
+      setInterval(draw, 50);
+
+      // Resize handler
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+
+      // Trigger refresh pulse when data loads
+      const originalLoadData = window.loadData;
+      window.loadData = async function() {
+        canvas.classList.add('refreshing');
+        await originalLoadData();
+        setTimeout(() => canvas.classList.remove('refreshing'), 1000);
+      };
+    }
+  </script>
+</body>
+</html>
